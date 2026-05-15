@@ -106,7 +106,7 @@ const Dashboard = () => {
           <div className="bg-orange-50 border border-orange-300 rounded p-3 mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2 text-orange-600 text-sm font-medium">
               <span className="animate-pulse text-lg">⏳</span>
-              Aapki kuch campaigns pending hain — 30 to 45 minutes mein complete hongi aur stats yahan update ho jayenge.
+              Your Campaign Is Pending
             </div>
             <button onClick={fetchCampaigns}
               className="bg-orange-400 hover:bg-orange-500 text-white px-3 py-1 rounded text-sm">
