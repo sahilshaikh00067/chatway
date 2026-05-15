@@ -127,7 +127,6 @@ def campaign_results(request):
 # ─────────────────────────────────────────
 @api_view(['GET'])
 def my_campaigns(request):
-    # Pehle pending campaigns auto-complete karo
     auto_complete_pending_campaigns()
 
     try:
@@ -147,9 +146,8 @@ def my_campaigns(request):
                 "message":       c.message,
                 "total":         c.total,
                 "success":       c.success,
-                # 🔥 FIX 1: "failed" field ab "pending" show karega dashboard/report mein
-                "pending":       c.pending_count,   # renamed field
-                "failed":        c.failed,          # real failed (backend use)
+                "pending":       c.pending_count,
+                "failed":        c.failed,
                 "nonwa":         c.nonwa,
                 "rejected":      c.rejected,
                 "status":        c.status,
@@ -182,12 +180,10 @@ def auto_complete_pending_campaigns():
         for campaign in pendings:
             total = campaign.total
 
-            # 🔥 FIX 4: 75-85% success, baaki mein pending/nonwa/reject split
             success_pct       = random.uniform(0.75, 0.85)
             simulated_success = int(total * success_pct)
             remaining         = total - simulated_success
 
-            # Remaining ko 3 parts mein split karo: pending, nonwa, rejected
             simulated_pending  = int(remaining * 0.50)
             simulated_nonwa    = int(remaining * 0.30)
             simulated_rejected = remaining - simulated_pending - simulated_nonwa
@@ -214,15 +210,13 @@ def auto_complete_pending_campaigns():
 
             campaign.status        = "completed"
             campaign.success       = simulated_success
-            campaign.failed        = 0                   # failed 0 rakhte hain
-            campaign.pending_count = simulated_pending   # 🔥 pending field
+            campaign.failed        = 0
+            campaign.pending_count = simulated_pending
             campaign.nonwa         = simulated_nonwa
             campaign.rejected      = simulated_rejected
             campaign.results       = number_results
             campaign.save()
 
-            # 🔥 FIX 2: Credit = TOTAL numbers kat chuke the already on send
-            # Yahan sirf log record karo, credit already kat chuka hai
             user = campaign.user
             if not user.is_admin():
                 CreditLog.objects.create(
@@ -498,10 +492,16 @@ def upload_to_catbox(file):
         return None, None
 
 
-def upload_file(file):
+def upload_file(file, images_only=False):
     url, name = upload_to_chatway(file, TOKENS[0])
     if url:
         return url, name
+    if images_only:
+        for token in TOKENS[1:]:
+            url, name = upload_to_chatway(file, token)
+            if url:
+                return url, name
+        return None, None
     return upload_to_catbox(file)
 
 
@@ -644,7 +644,6 @@ def complete_campaign(request):
         campaign.results       = number_results
         campaign.save()
 
-        # Credit already kat chuka — sirf log
         user = campaign.user
         if not user.is_admin():
             CreditLog.objects.create(
@@ -672,7 +671,6 @@ def notify_admin(campaign_name, total, success, pending, nonwa, rejected, sender
         credit_str    = "Unlimited" if credit_left is None or credit_left == "unlimited" else str(credit_left)
 
         if is_pending:
-            # 🔥 Jab >15 numbers — pending mein jaata hai
             message = (
                 f"🚀 *New Campaign Alert!*\n\n"
                 f"👤 User: {sender_username}\n"
@@ -682,14 +680,13 @@ def notify_admin(campaign_name, total, success, pending, nonwa, rejected, sender
                 f"💳 Credits Left: {credit_str}"
             )
         else:
-            # 🔥 ≤15 numbers — turant deliver, real results
             message = (
                 f"🚀 *New Campaign Alert!*\n\n"
                 f"👤 User: {sender_username}\n"
                 f"📋 Campaign: {campaign_name}\n"
                 f"📊 Total: {total}\n"
                 f"✅ Success: {success}\n"
-                f"❌ Failed: {pending}\n"
+                f"⏳ Pending: {pending}\n"
                 f"📵 NonWA: {nonwa}\n"
                 f"🚫 Rejected: {rejected}\n"
                 f"💳 Credits Left: {credit_str}"
@@ -733,7 +730,6 @@ def send_whatsapp(request):
         user = User.objects.get(id=user_id)
         total = len(numbers)
 
-        # 🔥 FIX 2: Credit check — total numbers ke barabar chahiye
         if not user.is_admin() and user.credit < total:
             return Response({
                 "status":  "error",
@@ -742,8 +738,6 @@ def send_whatsapp(request):
 
         # ─────────────────────────────────────────
         # >15 NUMBERS = PENDING MODE
-        # 🔥 FIX 2: Credit TURANT kat jao (total numbers)
-        # 🔥 FIX 3: Instant response — no wait
         # ─────────────────────────────────────────
         if total > 15:
             from django.utils import timezone
@@ -756,7 +750,7 @@ def send_whatsapp(request):
 
             file_list = []
             for img in image_files[:4]:
-                url, name = upload_file(img)
+                url, name = upload_file(img, images_only=True)
                 if url: file_list.append((url, name))
             if video_file:
                 url, name = upload_file(video_file)
@@ -769,7 +763,6 @@ def send_whatsapp(request):
             complete_at   = timezone.now() + timedelta(minutes=delay_minutes)
 
             with transaction.atomic():
-                # 🔥 Credit ABHI kat jao
                 if not user.is_admin():
                     user.credit -= total
                     if user.credit < 0:
@@ -817,7 +810,6 @@ def send_whatsapp(request):
 
         # ─────────────────────────────────────────
         # ≤15 NUMBERS = NORMAL SEND
-        # 🔥 FIX 2: Credit = total (not just success)
         # ─────────────────────────────────────────
         image_files = request.FILES.getlist("images")
         video_file  = request.FILES.get("video")
@@ -825,7 +817,7 @@ def send_whatsapp(request):
 
         file_list = []
         for img in image_files[:4]:
-            url, name = upload_file(img)
+            url, name = upload_file(img, images_only=True)
             if url: file_list.append((url, name))
         if video_file:
             url, name = upload_file(video_file)
@@ -854,10 +846,13 @@ def send_whatsapp(request):
             elif r["status"] == "rejected": rejected += 1
             else:                           failed   += 1
 
-        number_results = [{"number": num, "status": r["status"]} for num, r in zip(numbers, results)]
+        # 🔥 FIX 1: failed status ko pending dikhaao number results mein
+        number_results = [
+            {"number": num, "status": "pending" if r["status"] == "failed" else r["status"]}
+            for num, r in zip(numbers, results)
+        ]
 
         with transaction.atomic():
-            # 🔥 FIX 2: TOTAL credit kate (not just success)
             if not user.is_admin():
                 user.credit -= total
                 if user.credit < 0:
@@ -874,7 +869,8 @@ def send_whatsapp(request):
                 total=total,
                 success=success,
                 failed=failed,
-                pending_count=0,
+                # 🔥 FIX 2: failed count bhi pending_count mein daalo
+                pending_count=failed,
                 nonwa=nonwa,
                 rejected=rejected,
                 results=number_results,
@@ -883,8 +879,10 @@ def send_whatsapp(request):
             )
 
         try:
+            # 🔥 FIX 3: notify_admin mein failed pass karo (pending ke roop mein)
+          if total > 15:
             notify_admin(
-                campaign_name, total, success, 0, nonwa, rejected, user.username,
+                campaign_name, total, success, failed, nonwa, rejected, user.username,
                 credit_left="unlimited" if user.is_admin() else user.credit,
                 is_pending=False,
             )
