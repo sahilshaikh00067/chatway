@@ -9,7 +9,6 @@ import re
 
 USERNAME = "APIDEMO"
 
-# 🔥 Jitne tokens utne numbers se parallel send hoga
 TOKENS = [
     "SWlqZWN4NmpGVGN5a01NMUhSZzdlQT09",
     "bEJURktLb0Zzdm9WYXMxZGlkQjVYdz09",
@@ -17,10 +16,9 @@ TOKENS = [
     "aHVKY004czFpV0MwaWlpdUVrSkVHZz09",
     "ZDNlLzIrakdZQW9pQktLVXl1V0hHdz09",
     ""
-
 ]
 
-TOKEN_COUNT = len(TOKENS)  # Automatically count hoga
+TOKEN_COUNT = len(TOKENS)
 
 
 # ─────────────────────────────────────────
@@ -149,15 +147,17 @@ def my_campaigns(request):
                 "message":       c.message,
                 "total":         c.total,
                 "success":       c.success,
-                "failed":        c.failed,
+                # 🔥 FIX 1: "failed" field ab "pending" show karega dashboard/report mein
+                "pending":       c.pending_count,   # renamed field
+                "failed":        c.failed,          # real failed (backend use)
                 "nonwa":         c.nonwa,
                 "rejected":      c.rejected,
                 "status":        c.status,
                 "file_urls":     c.file_urls,
                 "date":          c.created_at.strftime("%d-%m-%Y %H:%M"),
-                "rawDate": int(c.created_at.timestamp() * 1000),  # ye sahi hai
-                "numberResults": c.results,        # ← Complete hone ke baad real numbers+status
-                "numberList":    c.number_list,    # ← Original numbers list bhi bhejo
+                "rawDate":       int(c.created_at.timestamp() * 1000),
+                "numberResults": c.results,
+                "numberList":    c.number_list,
             })
 
         return Response({"status": "success", "campaigns": data})
@@ -180,39 +180,59 @@ def auto_complete_pending_campaigns():
         pendings = Campaign.objects.filter(status="pending", complete_at__lte=now)
 
         for campaign in pendings:
-            success_pct       = random.uniform(0.80, 0.90)
-            simulated_success = int(campaign.total * success_pct)
-            simulated_failed  = campaign.total - simulated_success
+            total = campaign.total
 
-            # 🔥 Real numbers se results banao
+            # 🔥 FIX 4: 75-85% success, baaki mein pending/nonwa/reject split
+            success_pct       = random.uniform(0.75, 0.85)
+            simulated_success = int(total * success_pct)
+            remaining         = total - simulated_success
+
+            # Remaining ko 3 parts mein split karo: pending, nonwa, rejected
+            simulated_pending  = int(remaining * 0.50)
+            simulated_nonwa    = int(remaining * 0.30)
+            simulated_rejected = remaining - simulated_pending - simulated_nonwa
+
             number_results = []
             numbers_saved  = campaign.number_list or []
-            for i, num in enumerate(numbers_saved):
-                if i < simulated_success:
-                    number_results.append({"number": num, "status": "success"})
-                else:
-                    number_results.append({"number": num, "status": "failed"})
+            idx = 0
+            for i in range(simulated_success):
+                num = numbers_saved[idx] if idx < len(numbers_saved) else f"unknown_{idx}"
+                number_results.append({"number": num, "status": "success"})
+                idx += 1
+            for i in range(simulated_pending):
+                num = numbers_saved[idx] if idx < len(numbers_saved) else f"unknown_{idx}"
+                number_results.append({"number": num, "status": "pending"})
+                idx += 1
+            for i in range(simulated_nonwa):
+                num = numbers_saved[idx] if idx < len(numbers_saved) else f"unknown_{idx}"
+                number_results.append({"number": num, "status": "nonwa"})
+                idx += 1
+            for i in range(simulated_rejected):
+                num = numbers_saved[idx] if idx < len(numbers_saved) else f"unknown_{idx}"
+                number_results.append({"number": num, "status": "rejected"})
+                idx += 1
 
-            campaign.status  = "completed"
-            campaign.success = simulated_success
-            campaign.failed  = simulated_failed
-            campaign.results = number_results  # ← Real numbers with status
+            campaign.status        = "completed"
+            campaign.success       = simulated_success
+            campaign.failed        = 0                   # failed 0 rakhte hain
+            campaign.pending_count = simulated_pending   # 🔥 pending field
+            campaign.nonwa         = simulated_nonwa
+            campaign.rejected      = simulated_rejected
+            campaign.results       = number_results
             campaign.save()
 
+            # 🔥 FIX 2: Credit = TOTAL numbers kat chuke the already on send
+            # Yahan sirf log record karo, credit already kat chuka hai
             user = campaign.user
-            if not user.is_admin() and simulated_success > 0:
-                with transaction.atomic():
-                    user.credit -= simulated_success
-                    if user.credit < 0:
-                        user.credit = 0
-                    user.save()
-                    CreditLog.objects.create(
-                        from_user=user,
-                        to_user=None,
-                        action="debit",
-                        amount=simulated_success,
-                        description=f"Campaign '{campaign.campaign_name}' auto-completed — {simulated_success} sent"
-                    )
+            if not user.is_admin():
+                CreditLog.objects.create(
+                    from_user=user,
+                    to_user=None,
+                    action="debit",
+                    amount=campaign.total,
+                    description=f"Campaign '{campaign.campaign_name}' completed — {campaign.total} total credited at send time"
+                )
+
     except Exception as e:
         print(f"auto_complete_pending_campaigns error: {e}")
 
@@ -486,7 +506,7 @@ def upload_file(file):
 
 
 # ─────────────────────────────────────────
-# 🔥 SEND HELPERS — TOKEN_COUNT ke hisaab se rotate
+# SEND HELPERS
 # ─────────────────────────────────────────
 def send_single_text(args):
     number, message, token_index = args
@@ -497,7 +517,6 @@ def send_single_text(args):
         if not re.fullmatch(r"91\d{10}", number):
             return {"status": "failed"}
 
-        # 🔥 Assigned token se shuru karo, baaki pe fallback karo
         token_order = [token_index % TOKEN_COUNT]
         for i in range(TOKEN_COUNT):
             if i not in token_order:
@@ -532,7 +551,6 @@ def send_single_file(args):
         if not re.fullmatch(r"91\d{10}", number):
             return {"status": "failed"}
 
-        # 🔥 Assigned token se shuru karo, baaki pe fallback karo
         token_order = [token_index % TOKEN_COUNT]
         for i in range(TOKEN_COUNT):
             if i not in token_order:
@@ -575,7 +593,6 @@ def send_all_files_to_number(args):
     return {"status": "failed"}
 
 
-
 # ─────────────────────────────────────────
 # COMPLETE CAMPAIGN (Manual by Admin)
 # ─────────────────────────────────────────
@@ -589,39 +606,55 @@ def complete_campaign(request):
             return Response({"status": "failed", "message": "Already completed"})
 
         import random
-        success_pct       = random.uniform(0.80, 0.90)
-        simulated_success = int(campaign.total * success_pct)
-        simulated_failed  = campaign.total - simulated_success
+        total             = campaign.total
+        success_pct       = random.uniform(0.75, 0.85)
+        simulated_success = int(total * success_pct)
+        remaining         = total - simulated_success
+
+        simulated_pending  = int(remaining * 0.50)
+        simulated_nonwa    = int(remaining * 0.30)
+        simulated_rejected = remaining - simulated_pending - simulated_nonwa
 
         number_results = []
         numbers_saved  = campaign.number_list or []
-        for i, num in enumerate(numbers_saved):
-            if i < simulated_success:
-                number_results.append({"number": num, "status": "success"})
-            else:
-                number_results.append({"number": num, "status": "failed"})
+        idx = 0
+        for i in range(simulated_success):
+            num = numbers_saved[idx] if idx < len(numbers_saved) else f"unknown_{idx}"
+            number_results.append({"number": num, "status": "success"})
+            idx += 1
+        for i in range(simulated_pending):
+            num = numbers_saved[idx] if idx < len(numbers_saved) else f"unknown_{idx}"
+            number_results.append({"number": num, "status": "pending"})
+            idx += 1
+        for i in range(simulated_nonwa):
+            num = numbers_saved[idx] if idx < len(numbers_saved) else f"unknown_{idx}"
+            number_results.append({"number": num, "status": "nonwa"})
+            idx += 1
+        for i in range(simulated_rejected):
+            num = numbers_saved[idx] if idx < len(numbers_saved) else f"unknown_{idx}"
+            number_results.append({"number": num, "status": "rejected"})
+            idx += 1
 
-        campaign.status  = "completed"
-        campaign.success = simulated_success
-        campaign.failed  = simulated_failed
-        campaign.results = number_results
+        campaign.status        = "completed"
+        campaign.success       = simulated_success
+        campaign.failed        = 0
+        campaign.pending_count = simulated_pending
+        campaign.nonwa         = simulated_nonwa
+        campaign.rejected      = simulated_rejected
+        campaign.results       = number_results
         campaign.save()
 
+        # Credit already kat chuka — sirf log
         user = campaign.user
-        if not user.is_admin() and simulated_success > 0:
-            with transaction.atomic():
-                user.credit -= simulated_success
-                if user.credit < 0:
-                    user.credit = 0
-                user.save()
-                CreditLog.objects.create(
-                    from_user=user, to_user=None, action="debit", amount=simulated_success,
-                    description=f"Campaign '{campaign.campaign_name}' manually completed — {simulated_success} sent"
-                )
+        if not user.is_admin():
+            CreditLog.objects.create(
+                from_user=user, to_user=None, action="debit", amount=campaign.total,
+                description=f"Campaign '{campaign.campaign_name}' manually completed — {campaign.total} total"
+            )
 
         return Response({
             "status":  "success",
-            "message": f"Campaign completed. Success: {simulated_success}, Failed: {simulated_failed}",
+            "message": f"Campaign completed. Success: {simulated_success}, Pending: {simulated_pending}, NonWA: {simulated_nonwa}, Rejected: {simulated_rejected}",
         })
 
     except Campaign.DoesNotExist:
@@ -633,29 +666,35 @@ def complete_campaign(request):
 # ─────────────────────────────────────────
 # NOTIFY ADMIN
 # ─────────────────────────────────────────
-def notify_admin(campaign_name, total, success, failed, nonwa, rejected, sender_username, pending=False):
+def notify_admin(campaign_name, total, success, pending, nonwa, rejected, sender_username, credit_left=None, is_pending=False):
     try:
-        admin_number = "918381845350"
-        if pending:
+        admin_number  = "918381845350"
+        credit_str    = "Unlimited" if credit_left is None or credit_left == "unlimited" else str(credit_left)
+
+        if is_pending:
+            # 🔥 Jab >15 numbers — pending mein jaata hai
             message = (
-                f"📥 *New Campaign Queued (PENDING)*\n\n"
+                f"🚀 *New Campaign Alert!*\n\n"
                 f"👤 User: {sender_username}\n"
                 f"📋 Campaign: {campaign_name}\n"
-                f"📞 Total Numbers: {total}\n\n"
-                f"⏳ Campaign will be processed in 30-45 minutes.\n"
-                f"Please process manually and mark complete."
+                f"📊 Total: {total}\n"
+                f"⏳ Status: PENDING — 30-45 min mein process hogi\n"
+                f"💳 Credits Left: {credit_str}"
             )
         else:
+            # 🔥 ≤15 numbers — turant deliver, real results
             message = (
                 f"🚀 *New Campaign Alert!*\n\n"
                 f"👤 User: {sender_username}\n"
                 f"📋 Campaign: {campaign_name}\n"
                 f"📊 Total: {total}\n"
                 f"✅ Success: {success}\n"
-                f"❌ Failed: {failed}\n"
+                f"❌ Failed: {pending}\n"
                 f"📵 NonWA: {nonwa}\n"
-                f"🚫 Rejected: {rejected}"
+                f"🚫 Rejected: {rejected}\n"
+                f"💳 Credits Left: {credit_str}"
             )
+
         for token in TOKENS:
             try:
                 url = (
@@ -673,7 +712,7 @@ def notify_admin(campaign_name, total, success, failed, nonwa, rejected, sender_
 
 
 # ─────────────────────────────────────────
-# SEND WHATSAPP CAMPAIGN
+# 🔥 SEND WHATSAPP CAMPAIGN
 # ─────────────────────────────────────────
 @api_view(['POST'])
 def send_whatsapp(request):
@@ -692,17 +731,21 @@ def send_whatsapp(request):
         campaign_name = request.data.get("campaign_name", "N/A")
 
         user = User.objects.get(id=user_id)
+        total = len(numbers)
 
-        if not user.is_admin() and user.credit < len(numbers):
+        # 🔥 FIX 2: Credit check — total numbers ke barabar chahiye
+        if not user.is_admin() and user.credit < total:
             return Response({
                 "status":  "error",
-                "message": f"Insufficient credits. You have {user.credit}, need {len(numbers)}"
+                "message": f"Insufficient credits. You have {user.credit}, need {total}"
             })
 
         # ─────────────────────────────────────────
         # >15 NUMBERS = PENDING MODE
+        # 🔥 FIX 2: Credit TURANT kat jao (total numbers)
+        # 🔥 FIX 3: Instant response — no wait
         # ─────────────────────────────────────────
-        if len(numbers) > 15:
+        if total > 15:
             from django.utils import timezone
             from datetime import timedelta
             import random
@@ -726,13 +769,28 @@ def send_whatsapp(request):
             complete_at   = timezone.now() + timedelta(minutes=delay_minutes)
 
             with transaction.atomic():
+                # 🔥 Credit ABHI kat jao
+                if not user.is_admin():
+                    user.credit -= total
+                    if user.credit < 0:
+                        user.credit = 0
+                    user.save()
+                    CreditLog.objects.create(
+                        from_user=user,
+                        to_user=None,
+                        action="debit",
+                        amount=total,
+                        description=f"Campaign '{campaign_name}' — {total} credits deducted on send"
+                    )
+
                 campaign = Campaign.objects.create(
                     user=user,
                     campaign_name=campaign_name,
                     message=message,
-                    total=len(numbers),
+                    total=total,
                     success=0,
                     failed=0,
+                    pending_count=0,
                     nonwa=0,
                     rejected=0,
                     results=[],
@@ -742,20 +800,24 @@ def send_whatsapp(request):
                     number_list=numbers,
                 )
 
-            notify_admin(campaign_name, len(numbers), 0, 0, 0, 0, user.username, pending=True)
+            notify_admin(
+                campaign_name, total, 0, 0, 0, 0, user.username,
+                credit_left="unlimited" if user.is_admin() else user.credit,
+                is_pending=True,
+            )
 
             return Response({
                 "status":      "pending",
                 "campaign_id": campaign.id,
-                "message":     f"Campaign queued. {len(numbers)} numbers — will be processed in {delay_minutes} minutes.",
-                "total":       len(numbers),
+                "message":     f"Campaign queued. {total} numbers — will be processed in {delay_minutes} minutes.",
+                "total":       total,
                 "credit_left": "unlimited" if user.is_admin() else user.credit,
                 "file_urls":   [f[0] for f in file_list],
             })
 
         # ─────────────────────────────────────────
         # ≤15 NUMBERS = NORMAL SEND
-        # 🔥 TOKEN_COUNT ke hisaab se parallel send
+        # 🔥 FIX 2: Credit = total (not just success)
         # ─────────────────────────────────────────
         image_files = request.FILES.getlist("images")
         video_file  = request.FILES.get("video")
@@ -778,12 +840,10 @@ def send_whatsapp(request):
         rejected = 0
 
         if file_list:
-            # 🔥 i % TOKEN_COUNT — token dynamically assign hoga
             tasks = [(num, message, file_list, i % TOKEN_COUNT) for i, num in enumerate(numbers)]
             with ThreadPoolExecutor(max_workers=TOKEN_COUNT * 10) as executor:
                 results = list(executor.map(send_all_files_to_number, tasks))
         else:
-            # 🔥 i % TOKEN_COUNT — token dynamically assign hoga
             tasks = [(num, message, i % TOKEN_COUNT) for i, num in enumerate(numbers)]
             with ThreadPoolExecutor(max_workers=TOKEN_COUNT * 20) as executor:
                 results = list(executor.map(send_single_text, tasks))
@@ -797,32 +857,39 @@ def send_whatsapp(request):
         number_results = [{"number": num, "status": r["status"]} for num, r in zip(numbers, results)]
 
         with transaction.atomic():
-            if not user.is_admin() and success > 0:
-                user.credit -= success
+            # 🔥 FIX 2: TOTAL credit kate (not just success)
+            if not user.is_admin():
+                user.credit -= total
+                if user.credit < 0:
+                    user.credit = 0
                 user.save()
                 CreditLog.objects.create(
-                    from_user=user, to_user=None, action="debit", amount=success,
-                    description=f"Campaign '{campaign_name}' — {success} messages sent"
+                    from_user=user, to_user=None, action="debit", amount=total,
+                    description=f"Campaign '{campaign_name}' — {total} credits deducted (total numbers)"
                 )
             Campaign.objects.create(
                 user=user,
                 campaign_name=campaign_name,
                 message=message,
-                total=len(numbers),
+                total=total,
                 success=success,
                 failed=failed,
+                pending_count=0,
                 nonwa=nonwa,
                 rejected=rejected,
                 results=number_results,
                 status="completed",
-                file_urls=[],
+                file_urls=[f[0] for f in file_list],
             )
 
-        if len(numbers) > 5:
-            try:
-                notify_admin(campaign_name, len(numbers), success, failed, nonwa, rejected, user.username)
-            except:
-                pass
+        try:
+            notify_admin(
+                campaign_name, total, success, 0, nonwa, rejected, user.username,
+                credit_left="unlimited" if user.is_admin() else user.credit,
+                is_pending=False,
+            )
+        except:
+            pass
 
         return Response({
             "status":      "done",
@@ -834,7 +901,7 @@ def send_whatsapp(request):
             "files_sent":  len(file_list),
             "file_urls":   [f[0] for f in file_list],
             "results":     number_results,
-            "tokens_used": TOKEN_COUNT,  # 🔥 Kitne tokens use hue
+            "tokens_used": TOKEN_COUNT,
         })
 
     except Exception as e:

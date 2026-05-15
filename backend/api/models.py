@@ -23,7 +23,6 @@ class User(models.Model):
         return self.role == "admin"
 
     def save(self, *args, **kwargs):
-        # Admin ka credit kabhi negative nahi hoga (unlimited treat hota hai)
         if self.role != "admin" and self.credit < 0:
             self.credit = 0
         super().save(*args, **kwargs)
@@ -46,9 +45,8 @@ class CreditLog(models.Model):
 
     def __str__(self):
         return f"{self.action} {self.amount} | {self.from_user} → {self.to_user}"
-    
 
-    
+
 class Campaign(models.Model):
     STATUS_CHOICES = (
         ("pending",   "Pending"),
@@ -61,8 +59,10 @@ class Campaign(models.Model):
     total         = models.IntegerField(default=0)
     success       = models.IntegerField(default=0)
     failed        = models.IntegerField(default=0)
-    nonwa         = models.IntegerField(default=0)                    # ← ADD
-    rejected      = models.IntegerField(default=0)                    # ← ADD
+    # 🔥 NEW: "failed" ki jagah "pending" show hoga frontend pe
+    pending_count = models.IntegerField(default=0)
+    nonwa         = models.IntegerField(default=0)
+    rejected      = models.IntegerField(default=0)
     status        = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -70,8 +70,8 @@ class Campaign(models.Model):
     )
     results       = models.JSONField(default=list, blank=True)
     number_list   = models.JSONField(default=list, blank=True)
-    file_urls     = models.JSONField(default=list, blank=True)        # ← ADD
-    complete_at   = models.DateTimeField(null=True, blank=True)       # ← ADD
+    file_urls     = models.JSONField(default=list, blank=True)
+    complete_at   = models.DateTimeField(null=True, blank=True)
     created_at    = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

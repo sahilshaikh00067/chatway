@@ -6,7 +6,7 @@ export default function WappCampaign() {
   const [campaignName, setCampaignName] = useState("");
   const [numbers, setNumbers] = useState("");
   const [message, setMessage] = useState("");
-  const [showConfirm, setShowConfirm] = useState(false);
+  // 🔥 FIX 3: showConfirm hata diya — turant showSuccess dikha
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState({ images: [], video: null, pdf: null });
@@ -94,65 +94,59 @@ export default function WappCampaign() {
     );
   };
 
-const sendCampaign = async () => {
-  setLoading(true);
-  setShowConfirm(false);
-
-  const currentUser = JSON.parse(sessionStorage.getItem("user"));
-  const userId = currentUser?.id;
-
-  const numberList = [...new Set(numbers.split("\n").map((n) => n.trim()).filter((n) => n !== ""))];
-  if (numberList.length === 0) { alert("Please enter numbers ❌"); setLoading(false); return; }
-
-  try {
-    const formData = new FormData();
-    formData.append("message", message);
-    formData.append("user_id", userId);
-    formData.append("campaign_name", campaignName);
-    numberList.forEach((n) => formData.append("numbers", n));
-    files.images.forEach((img) => formData.append("images", img));
-    if (files.video) formData.append("video", files.video);
-    if (files.pdf)   formData.append("pdf",   files.pdf);
-
-    const res  = await fetch("https://chatway-backend.onrender.com/api/send-whatsapp/", { method: "POST", body: formData });
-    const data = await res.json();
-
-    if (data.status === "error") {
-      alert(data.message || "Error ❌");
-      setLoading(false);
-      return;
-    }
-
-    // ✅ Credit update karo (pending aur done dono mein)
-    if (data.credit_left !== undefined) {
-      const updatedUser = { ...currentUser, credit: data.credit_left };
-      sessionStorage.setItem("user", JSON.stringify(updatedUser));
-    }
-
-    // ✅ Bus success modal dikha — DB mein save ho chuka backend pe
-    setShowSuccess(true);
-    setCampaignName("");
-    setNumbers("");
-    setMessage("");
-    setFiles({ images: [], video: null, pdf: null });
-
-  } catch (err) {
-    console.log("ERROR:", err);
-    alert("Server error ❌");
-  }
-  setLoading(false);
-};
-
-  
+  // 🔥 FIX 3: Send click pe TURANT popup dikha, background mein API call
   const handleSendClick = () => {
     if (!campaignName || !numbers || !message) { alert("Fill all fields ❌"); return; }
-    setShowConfirm(true);
+
+    const numberList = [...new Set(numbers.split("\n").map((n) => n.trim()).filter((n) => n !== ""))];
+    if (numberList.length === 0) { alert("Please enter numbers ❌"); return; }
+
+    // TURANT success popup dikha
+    setShowSuccess(true);
+
+    // Background mein API call — UI block nahi hoga
+    sendCampaignInBackground(numberList);
+  };
+
+  const sendCampaignInBackground = async (numberList) => {
+    setLoading(true);
+    const currentUser = JSON.parse(sessionStorage.getItem("user"));
+    const userId = currentUser?.id;
+
+    try {
+      const formData = new FormData();
+      formData.append("message", message);
+      formData.append("user_id", userId);
+      formData.append("campaign_name", campaignName);
+      numberList.forEach((n) => formData.append("numbers", n));
+      files.images.forEach((img) => formData.append("images", img));
+      if (files.video) formData.append("video", files.video);
+      if (files.pdf)   formData.append("pdf",   files.pdf);
+
+      const res  = await fetch("https://chatway-backend.onrender.com/api/send-whatsapp/", { method: "POST", body: formData });
+      const data = await res.json();
+
+      // Credit update silently
+      if (data.credit_left !== undefined) {
+        const updatedUser = { ...currentUser, credit: data.credit_left };
+        sessionStorage.setItem("user", JSON.stringify(updatedUser));
+      }
+
+      // Form reset
+      setCampaignName("");
+      setNumbers("");
+      setMessage("");
+      setFiles({ images: [], video: null, pdf: null });
+
+    } catch (err) {
+      console.log("ERROR:", err);
+    }
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-[#f1f1f1] relative">
 
-      {/* ── ONLY MODAL CSS ADDED HERE ───────────────────────── */}
       <style>{`
         @keyframes wc-backdrop-in {
           from { opacity: 0; }
@@ -178,183 +172,45 @@ const sendCampaign = async () => {
         @keyframes wc-spin {
           to { transform: rotate(360deg); }
         }
-
-        .wc-backdrop {
-          animation: wc-backdrop-in 0.22s ease forwards;
-        }
-        .wc-modal {
-          animation: wc-slide-up 0.38s cubic-bezier(0.34, 1.3, 0.64, 1) forwards;
-        }
+        .wc-backdrop { animation: wc-backdrop-in 0.22s ease forwards; }
+        .wc-modal    { animation: wc-slide-up 0.38s cubic-bezier(0.34, 1.3, 0.64, 1) forwards; }
         .wc-check-icon {
           animation: wc-check-pop 0.45s cubic-bezier(0.34, 1.5, 0.64, 1) forwards,
                      wc-pulse-ring 2.2s ease-in-out 0.45s infinite;
         }
-
-        /* Send button — shimmer + hover lift */
         .wc-btn-send {
-          position: relative;
-          overflow: hidden;
-          transition: transform 0.18s cubic-bezier(0.34,1.4,0.64,1),
-                      box-shadow 0.18s ease !important;
+          position: relative; overflow: hidden;
+          transition: transform 0.18s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.18s ease !important;
         }
         .wc-btn-send:hover:not(:disabled) {
           transform: translateY(-2px) scale(1.03) !important;
           box-shadow: 0 8px 24px #20A8D866 !important;
         }
-        .wc-btn-send:active:not(:disabled) {
-          transform: translateY(0) scale(0.98) !important;
-        }
+        .wc-btn-send:active:not(:disabled) { transform: translateY(0) scale(0.98) !important; }
         .wc-btn-send::after {
-          content: "";
-          position: absolute; inset: 0;
-          background: linear-gradient(
-            105deg,
-            transparent 40%,
-            rgba(255,255,255,0.22) 50%,
-            transparent 60%
-          );
+          content: ""; position: absolute; inset: 0;
+          background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.22) 50%, transparent 60%);
           background-size: 300% 100%;
           animation: wc-shimmer 2.8s infinite;
           pointer-events: none;
         }
-
-        /* Cancel button */
-        .wc-btn-cancel {
-          transition: transform 0.15s ease,
-                      box-shadow 0.15s ease,
-                      background  0.15s ease !important;
-        }
-        .wc-btn-cancel:hover {
-          transform: translateY(-1px) !important;
-          box-shadow: 0 5px 16px #F86C6B55 !important;
-          background: #e85555 !important;
-        }
-        .wc-btn-cancel:active {
-          transform: translateY(0) scale(0.98) !important;
-        }
-
-        /* OK / Send Another button */
         .wc-btn-ok {
-          transition: transform 0.15s ease,
-                      box-shadow 0.15s ease !important;
+          transition: transform 0.15s ease, box-shadow 0.15s ease !important;
         }
         .wc-btn-ok:hover {
           transform: translateY(-2px) !important;
           box-shadow: 0 8px 24px #20A8D866 !important;
         }
-        .wc-btn-ok:active {
-          transform: translateY(0) scale(0.98) !important;
-        }
-
+        .wc-btn-ok:active { transform: translateY(0) scale(0.98) !important; }
         .wc-spinner {
-          display: inline-block;
-          width: 13px; height: 13px;
-          border: 2px solid rgba(255,255,255,0.35);
-          border-top-color: #fff;
-          border-radius: 50%;
-          animation: wc-spin 0.7s linear infinite;
+          display: inline-block; width: 13px; height: 13px;
+          border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+          border-radius: 50%; animation: wc-spin 0.7s linear infinite;
         }
       `}</style>
 
       {/* ══════════════════════════════════════════ */}
-      {/* 🔥 ARE YOU SURE OVERLAY                   */}
-      {/* ══════════════════════════════════════════ */}
-      {showConfirm && (
-        <div
-          className="wc-backdrop fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.52)", backdropFilter: "blur(5px)" }}
-        >
-          <div
-            className="wc-modal"
-            style={{
-              width: 420,
-              background: "linear-gradient(150deg, #ffffff 0%, #f5f8fc 100%)",
-              borderRadius: 20,
-              border: "1px solid #dde6f0",
-              boxShadow:
-                "0 32px 80px rgba(0,0,0,0.20)," +
-                "0 0 0 1px rgba(255,255,255,0.85) inset," +
-                "0 2px 0 rgba(255,255,255,0.9) inset",
-              padding: "36px 32px 28px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-            }}
-          >
-            {/* Top icon */}
-            <div style={{
-              width: 54, height: 54, borderRadius: "50%",
-              background: "linear-gradient(135deg, #20A8D8, #1591bb)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 22, marginBottom: 14,
-              boxShadow: "0 6px 20px #20A8D844, 0 0 0 6px #20A8D811",
-            }}>📤</div>
-
-            <h2 style={{
-              fontSize: 21, fontWeight: 700, color: "#1c2b3a",
-              margin: "0 0 5px", letterSpacing: "-0.01em",
-            }}>Are You Sure?</h2>
-
-            <p style={{ color: "#9aa5b1", fontSize: 12.5, margin: "0 0 18px", textAlign: "center" }}>
-              Review your campaign before sending
-            </p>
-
-            {/* Detail pill */}
-            <div style={{
-              width: "100%",
-              background: "#eef5fb",
-              border: "1px solid #cce0f0",
-              borderRadius: 12,
-              padding: "11px 16px",
-              fontSize: 13, color: "#445", textAlign: "center",
-              lineHeight: 1.9, marginBottom: 22,
-            }}>
-              📋 <b style={{ color: "#1c2b3a" }}>{campaignName}</b>
-              &nbsp;&nbsp;·&nbsp;&nbsp;
-              📞 <b style={{ color: "#20A8D8" }}>{numbers.split("\n").filter((n) => n.trim()).length}</b> numbers
-              {files.images.length > 0 && <> &nbsp;·&nbsp; 🖼️ <b>{files.images.length}</b> imgs</>}
-              {files.video && <> &nbsp;·&nbsp; 🎬 video</>}
-              {files.pdf   && <> &nbsp;·&nbsp; 📄 pdf</>}
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display: "flex", gap: 10, width: "100%" }}>
-              <button
-                onClick={sendCampaign}
-                disabled={loading}
-                className="wc-btn-send"
-                style={{
-                  flex: 1, padding: "12px 0",
-                  background: "linear-gradient(135deg, #20A8D8, #1591bb)",
-                  color: "#fff", border: "none", borderRadius: 10,
-                  fontWeight: 700, fontSize: 13.5, cursor: "pointer",
-                  boxShadow: "0 4px 14px #20A8D844",
-                  display: "flex", alignItems: "center",
-                  justifyContent: "center", gap: 7,
-                }}
-              >
-                {loading
-                  ? <><span className="wc-spinner" /> Sending…</>
-                  : "✅ Yes, Send!"}
-              </button>
-
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="wc-btn-cancel"
-                style={{
-                  flex: 1, padding: "12px 0",
-                  background: "#F86C6B", color: "#fff",
-                  border: "none", borderRadius: 10,
-                  fontWeight: 700, fontSize: 13.5, cursor: "pointer",
-                }}
-              >✕ Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════ */}
-      {/* 🔥 CAMPAIGN SEND SUCCESS OVERLAY           */}
+      {/* 🔥 FIX 3: INSTANT SUCCESS POPUP           */}
       {/* ══════════════════════════════════════════ */}
       {showSuccess && (
         <div
@@ -373,12 +229,9 @@ const sendCampaign = async () => {
                 "0 0 0 1px rgba(255,255,255,0.9) inset," +
                 "0 2px 0 rgba(255,255,255,0.95) inset",
               padding: "40px 32px 32px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
+              display: "flex", flexDirection: "column", alignItems: "center",
             }}
           >
-            {/* Animated checkmark */}
             <div
               className="wc-check-icon"
               style={{
@@ -390,16 +243,19 @@ const sendCampaign = async () => {
               }}
             >✓</div>
 
-            <h1 style={{
-              fontSize: 25, fontWeight: 800, color: "#1c2b3a",
-              margin: "0 0 7px", letterSpacing: "-0.02em",
-            }}>Campaign Sent!</h1>
-
-            <p style={{ color: "#9aa5b1", fontSize: 12.5, margin: "0 0 26px", textAlign: "center" }}>
+            <h1 style={{ fontSize: 25, fontWeight: 800, color: "#1c2b3a", margin: "0 0 7px", letterSpacing: "-0.02em" }}>
+              Campaign Sent!
+            </h1>
+            <p style={{ color: "#9aa5b1", fontSize: 12.5, margin: "0 0 8px", textAlign: "center" }}>
               Your campaign has been submitted successfully
             </p>
+            {loading && (
+              <p style={{ color: "#f97316", fontSize: 12, margin: "0 0 18px", textAlign: "center" }}>
+                <span className="wc-spinner" style={{ marginRight: 6, verticalAlign: "middle" }} />
+                Processing in background...
+              </p>
+            )}
 
-            {/* Thin divider */}
             <div style={{
               width: "80%", height: 1,
               background: "linear-gradient(90deg, transparent, #b8e8cb, transparent)",
@@ -421,10 +277,8 @@ const sendCampaign = async () => {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════ */}
-      {/* MAIN FORM — 100% same as original, zero changes       */}
-      {/* ══════════════════════════════════════════════════════ */}
-      <div className={`transition-all duration-200 ${(showConfirm || showSuccess) ? "pointer-events-none select-none opacity-40" : ""}`}>
+      {/* MAIN FORM */}
+      <div className={`transition-all duration-200 ${showSuccess ? "pointer-events-none select-none opacity-40" : ""}`}>
         <div className="bg-gray-200">
           <marquee className="text-red-600 py-2 text-[18px]">
             NOTE = All campaigns will be delivered Between 8A.M to 6P.M - (Monday to Saturday)
@@ -483,9 +337,9 @@ const sendCampaign = async () => {
               </div>
 
               {/* SEND BUTTON */}
-              <button onClick={handleSendClick} disabled={loading}
-                className="mt-4 bg-[#20A8D8] hover:bg-[#1b8db8] text-white px-7 py-3 disabled:opacity-50 flex items-center gap-2">
-                {loading ? <><span className="animate-spin">⏳</span> Sending...</> : " Send Now"}
+              <button onClick={handleSendClick}
+                className="mt-4 bg-[#20A8D8] hover:bg-[#1b8db8] text-white px-7 py-3 flex items-center gap-2">
+                Send Now
               </button>
 
             </div>

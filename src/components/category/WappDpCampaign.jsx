@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { FaComments } from "react-icons/fa";
 
@@ -13,7 +13,7 @@ export default function WappDpCampaign() {
   const [numbers, setNumbers] = useState("");
   const [message, setMessage] = useState("");
 
-  const [showConfirm, setShowConfirm] = useState(false);
+  // 🔥 FIX 3: showConfirm hata diya — turant showSuccess
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -122,57 +122,50 @@ export default function WappDpCampaign() {
   };
 
   // ===============================
-  // 🔥 SEND CAMPAIGN
+  // 🔥 FIX 3: Send click pe TURANT popup, background mein API
   // ===============================
-const sendCampaign = async () => {
-  setLoading(true);
-  setShowConfirm(false);
-
-  const currentUser = JSON.parse(sessionStorage.getItem("user"));
-  const userId = currentUser?.id;
-
-  if (numberList.length === 0) { alert("Please enter numbers ❌"); setLoading(false); return; }
-
-  try {
-    const formData = new FormData();
-    formData.append("message", message);
-    formData.append("user_id", userId);
-    formData.append("campaign_name", campaignName);
-    numberList.forEach((n) => formData.append("numbers", n));
-    if (dp) formData.append("dp", dp);
-    images.forEach((img) => formData.append("images", img));
-    if (video) formData.append("video", video);
-    if (pdf)   formData.append("pdf",   pdf);
-
-    const res  = await fetch("https://chatway-backend.onrender.com/api/send-whatsapp/", { method: "POST", body: formData });
-    const data = await res.json();
-
-    if (data.status === "error") {
-      alert(data.message || "Error ❌");
-      setLoading(false);
-      return;
-    }
-
-    // ✅ Credit update karo (pending aur done dono mein)
-    if (data.credit_left !== undefined) {
-      const updatedUser = { ...currentUser, credit: data.credit_left };
-      sessionStorage.setItem("user", JSON.stringify(updatedUser));
-    }
-
-    // ✅ Bus success modal dikha — DB mein save ho chuka backend pe
-    setShowSuccess(true);
-    resetForm();
-
-  } catch (err) {
-    console.log("ERROR:", err);
-    alert("Server error ❌");
-  }
-  setLoading(false);
-};
-
   const handleSendClick = () => {
     if (!campaignName || !numbers || !message) { alert("Fill all fields ❌"); return; }
-    setShowConfirm(true);
+    if (numberList.length === 0) { alert("Please enter numbers ❌"); return; }
+
+    // TURANT success popup dikha
+    setShowSuccess(true);
+
+    // Background mein API call
+    sendCampaignInBackground();
+  };
+
+  const sendCampaignInBackground = async () => {
+    setLoading(true);
+    const currentUser = JSON.parse(sessionStorage.getItem("user"));
+    const userId = currentUser?.id;
+
+    try {
+      const formData = new FormData();
+      formData.append("message", message);
+      formData.append("user_id", userId);
+      formData.append("campaign_name", campaignName);
+      numberList.forEach((n) => formData.append("numbers", n));
+      if (dp) formData.append("dp", dp);
+      images.forEach((img) => formData.append("images", img));
+      if (video) formData.append("video", video);
+      if (pdf)   formData.append("pdf",   pdf);
+
+      const res  = await fetch("https://chatway-backend.onrender.com/api/send-whatsapp/", { method: "POST", body: formData });
+      const data = await res.json();
+
+      // Credit silently update
+      if (data.credit_left !== undefined) {
+        const updatedUser = { ...currentUser, credit: data.credit_left };
+        sessionStorage.setItem("user", JSON.stringify(updatedUser));
+      }
+
+      resetForm();
+
+    } catch (err) {
+      console.log("ERROR:", err);
+    }
+    setLoading(false);
   };
 
   // ===============================
@@ -181,7 +174,6 @@ const sendCampaign = async () => {
   return (
     <div className="min-h-screen bg-[#f1f1f1] relative">
 
-      {/* ── MODAL ANIMATIONS ONLY ───────────────────────── */}
       <style>{`
         @keyframes wc-backdrop-in {
           from { opacity: 0; }
@@ -229,15 +221,6 @@ const sendCampaign = async () => {
           animation: wc-shimmer 2.8s infinite;
           pointer-events: none;
         }
-        .wc-btn-cancel {
-          transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
-        }
-        .wc-btn-cancel:hover {
-          transform: translateY(-1px) !important;
-          box-shadow: 0 5px 16px #F86C6B55 !important;
-          background: #e85555 !important;
-        }
-        .wc-btn-cancel:active { transform: translateY(0) scale(0.98) !important; }
         .wc-btn-ok {
           transition: transform 0.15s ease, box-shadow 0.15s ease !important;
         }
@@ -254,92 +237,7 @@ const sendCampaign = async () => {
       `}</style>
 
       {/* ══════════════════════════════════════════ */}
-      {/* 🔥 ARE YOU SURE OVERLAY                   */}
-      {/* ══════════════════════════════════════════ */}
-      {showConfirm && (
-        <div
-          className="wc-backdrop fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.52)", backdropFilter: "blur(5px)" }}
-        >
-          <div
-            className="wc-modal"
-            style={{
-              width: 420,
-              background: "linear-gradient(150deg, #ffffff 0%, #f5f8fc 100%)",
-              borderRadius: 20,
-              border: "1px solid #dde6f0",
-              boxShadow:
-                "0 32px 80px rgba(0,0,0,0.20)," +
-                "0 0 0 1px rgba(255,255,255,0.85) inset," +
-                "0 2px 0 rgba(255,255,255,0.9) inset",
-              padding: "36px 32px 28px",
-              display: "flex", flexDirection: "column", alignItems: "center",
-            }}
-          >
-            <div style={{
-              width: 54, height: 54, borderRadius: "50%",
-              background: "linear-gradient(135deg, #20A8D8, #1591bb)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 22, marginBottom: 14,
-              boxShadow: "0 6px 20px #20A8D844, 0 0 0 6px #20A8D811",
-            }}>📤</div>
-
-            <h2 style={{ fontSize: 21, fontWeight: 700, color: "#1c2b3a", margin: "0 0 5px" }}>
-              Are You Sure?
-            </h2>
-            <p style={{ color: "#9aa5b1", fontSize: 12.5, margin: "0 0 18px", textAlign: "center" }}>
-              Review your campaign before sending
-            </p>
-
-            <div style={{
-              width: "100%",
-              background: "#eef5fb", border: "1px solid #cce0f0",
-              borderRadius: 12, padding: "11px 16px",
-              fontSize: 13, color: "#445", textAlign: "center",
-              lineHeight: 1.9, marginBottom: 22,
-            }}>
-              📋 <b style={{ color: "#1c2b3a" }}>{campaignName}</b>
-              &nbsp;&nbsp;·&nbsp;&nbsp;
-              📞 <b style={{ color: "#20A8D8" }}>{numberList.length}</b> numbers
-              {dp      && <> &nbsp;·&nbsp; 👤 DP</>}
-              {images.length > 0 && <> &nbsp;·&nbsp; 🖼️ <b>{images.length}</b> imgs</>}
-              {video   && <> &nbsp;·&nbsp; 🎬 video</>}
-              {pdf     && <> &nbsp;·&nbsp; 📄 pdf</>}
-            </div>
-
-            <div style={{ display: "flex", gap: 10, width: "100%" }}>
-              <button
-                onClick={sendCampaign}
-                disabled={loading}
-                className="wc-btn-send"
-                style={{
-                  flex: 1, padding: "12px 0",
-                  background: "linear-gradient(135deg, #20A8D8, #1591bb)",
-                  color: "#fff", border: "none", borderRadius: 10,
-                  fontWeight: 700, fontSize: 13.5, cursor: "pointer",
-                  boxShadow: "0 4px 14px #20A8D844",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                }}
-              >
-                {loading ? <><span className="wc-spinner" /> Sending…</> : "✅ Yes, Send!"}
-              </button>
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="wc-btn-cancel"
-                style={{
-                  flex: 1, padding: "12px 0",
-                  background: "#F86C6B", color: "#fff",
-                  border: "none", borderRadius: 10,
-                  fontWeight: 700, fontSize: 13.5, cursor: "pointer",
-                }}
-              >✕ Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════ */}
-      {/* 🔥 CAMPAIGN SEND SUCCESS OVERLAY           */}
+      {/* 🔥 INSTANT SUCCESS POPUP                  */}
       {/* ══════════════════════════════════════════ */}
       {showSuccess && (
         <div
@@ -375,9 +273,15 @@ const sendCampaign = async () => {
             <h1 style={{ fontSize: 25, fontWeight: 800, color: "#1c2b3a", margin: "0 0 7px", letterSpacing: "-0.02em" }}>
               Campaign Sent!
             </h1>
-            <p style={{ color: "#9aa5b1", fontSize: 12.5, margin: "0 0 26px", textAlign: "center" }}>
+            <p style={{ color: "#9aa5b1", fontSize: 12.5, margin: "0 0 8px", textAlign: "center" }}>
               Your campaign has been submitted successfully
             </p>
+            {loading && (
+              <p style={{ color: "#f97316", fontSize: 12, margin: "0 0 18px", textAlign: "center" }}>
+                <span className="wc-spinner" style={{ marginRight: 6, verticalAlign: "middle" }} />
+                Processing in background...
+              </p>
+            )}
 
             <div style={{
               width: "80%", height: 1,
@@ -401,9 +305,9 @@ const sendCampaign = async () => {
       )}
 
       {/* ══════════════════════════════════════════════════════ */}
-      {/* MAIN FORM — 100% same as original, zero changes       */}
+      {/* MAIN FORM                                            */}
       {/* ══════════════════════════════════════════════════════ */}
-      <div className={`transition-all duration-200 ${(showConfirm || showSuccess) ? "pointer-events-none select-none opacity-40" : ""}`}>
+      <div className={`transition-all duration-200 ${showSuccess ? "pointer-events-none select-none opacity-40" : ""}`}>
 
         <div className="bg-gray-200">
           <marquee className="text-red-600 py-2 text-[18px]">
@@ -457,7 +361,7 @@ const sendCampaign = async () => {
                     className="w-full h-[190px] border border-green-400 rounded px-2 py-2 text-[13px] outline-none resize-none mb-3"
                   />
 
-                  {/* 🔥 DP UPLOAD */}
+                  {/* DP UPLOAD */}
                   <div className="border border-gray-300 rounded overflow-hidden mb-2">
                     <div className="bg-[#F86C6B] text-white px-4 py-2 text-[13px] font-semibold flex justify-between items-center">
                       <span>👤 DP Image — Profile picture set hogi (Max 1MB)</span>
@@ -521,10 +425,9 @@ const sendCampaign = async () => {
               {/* SEND BUTTON */}
               <button
                 onClick={handleSendClick}
-                disabled={loading}
-                className=" bg-[#20A8D8] hover:bg-[#1b8db8] text-white px-8 rounded-b-md py-3 disabled:opacity-50 flex items-center gap-2"
+                className="bg-[#20A8D8] hover:bg-[#1b8db8] text-white px-8 rounded-b-md py-3 flex items-center gap-2 mt-4"
               >
-                {loading ? <><span className="animate-spin">⏳</span> Sending...</> : " Send Now"}
+                Send Now
               </button>
 
             </div>

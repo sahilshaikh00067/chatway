@@ -20,9 +20,6 @@ const WappReports = () => {
 
   const filters = ["Today", "Yesterday", "Last 7 Days", "Last 30 Days", "This Month", "Last Month", "Custom Range"];
 
-  // ─────────────────────────────────────────
-  // FETCH FROM DB
-  // ─────────────────────────────────────────
   const fetchCampaigns = async () => {
     const currentUser = JSON.parse(sessionStorage.getItem("user"));
     if (!currentUser) return;
@@ -39,32 +36,18 @@ const WappReports = () => {
     setLoading(false);
   };
 
-  // Page load pe fetch karo
-  useEffect(() => {
-    fetchCampaigns();
-  }, []);
+  useEffect(() => { fetchCampaigns(); }, []);
 
-  // ─────────────────────────────────────────
-  // AUTO REFRESH — agar koi pending campaign hai
-  // ─────────────────────────────────────────
   useEffect(() => {
     const hasPending = allEntries.some((e) => e.status === "pending");
-
     if (hasPending) {
-      // Har 60 second mein check karo
-      intervalRef.current = setInterval(() => {
-        fetchCampaigns();
-      }, 60 * 1000);
+      intervalRef.current = setInterval(() => { fetchCampaigns(); }, 60 * 1000);
     } else {
       clearInterval(intervalRef.current);
     }
-
     return () => clearInterval(intervalRef.current);
   }, [allEntries]);
 
-  // ─────────────────────────────────────────
-  // FILTER LOGIC
-  // ─────────────────────────────────────────
   useEffect(() => {
     const now   = new Date();
     const IST_OFFSET = 5.5 * 60 * 60 * 1000;
@@ -102,37 +85,41 @@ const WappReports = () => {
     setPage(1);
   }, [selectedFilter, allEntries, customStart, customEnd]);
 
-  // ─────────────────────────────────────────
-  // DOWNLOAD EXCEL
-  // ─────────────────────────────────────────
-const handleDownload = (data) => {
-  const total = data.total || 0;
-  if (total === 0) { alert("No data available."); return; }
+  const handleDownload = (data) => {
+    const total = data.total || 0;
+    if (total === 0) { alert("No data available."); return; }
 
-  let rows = [];
+    let rows = [];
+    if (data.numberResults && data.numberResults.length > 0) {
+      rows = data.numberResults.map((r) => ({
+        Number: r.number,
+        Status: r.status.toUpperCase(),
+      }));
+    } else {
+      alert("No number data available for this campaign.");
+      return;
+    }
 
-  if (data.numberResults && data.numberResults.length > 0) {
-    // Normal campaign ya completed pending — real results hain
-    rows = data.numberResults.map((r) => ({
-      Number: r.number,
-      Status: r.status.toUpperCase(),
-    }));
-  } else {
-    // Abhi bhi koi data nahi (purana campaign)
-    alert("No number data available for this campaign.");
-    return;
-  }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [{ wch: 20 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Campaign Report");
+    XLSX.writeFile(wb, `${data.name || "report"}.xlsx`);
+  };
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  ws["!cols"] = [{ wch: 20 }, { wch: 12 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Campaign Report");
-  XLSX.writeFile(wb, `${data.name || "report"}.xlsx`);
-};
+  // 🔥 FIX 5: Helper to detect file type from URL
+  const getFileType = (url) => {
+    if (!url) return "file";
+    const lower = url.toLowerCase();
+    if (lower.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/)) return "image";
+    if (lower.match(/\.(mp4|mov|avi|mkv|webm)(\?|$)/))  return "video";
+    if (lower.match(/\.pdf(\?|$)/))                       return "pdf";
+    return "file";
+  };
 
-  const toggleRow    = (i) => setOpenRow(openRow === i ? null : i);
-  const totalPages   = Math.ceil(entries.length / perPage);
-  const paginated    = entries.slice((page - 1) * perPage, page * perPage);
+  const toggleRow  = (i) => setOpenRow(openRow === i ? null : i);
+  const totalPages = Math.ceil(entries.length / perPage);
+  const paginated  = entries.slice((page - 1) * perPage, page * perPage);
 
   return (
     <div className="min-h-screen bg-[#f1f1f1]">
@@ -149,7 +136,6 @@ const handleDownload = (data) => {
           <div className="px-4 py-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h2 className="font-semibold text-[18px] text-gray-800">Whatsapp Report</h2>
-              {/* 🔥 Manual refresh button */}
               <button
                 onClick={fetchCampaigns}
                 className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-600 px-3 py-1 rounded text-sm flex items-center gap-1"
@@ -245,7 +231,6 @@ const handleDownload = (data) => {
                           <td className="px-3 py-2 border-r border-gray-300">{e.total}</td>
                           <td className="px-3 py-2 border-r border-gray-300 max-w-[200px] truncate">{e.message}</td>
 
-                          {/* 🔥 STATUS BADGE */}
                           <td className="px-3 py-2 border-r border-gray-300">
                             {e.status === "pending" ? (
                               <span className="bg-orange-400 text-white px-2 py-1 text-xs rounded-full animate-pulse">
@@ -253,7 +238,7 @@ const handleDownload = (data) => {
                               </span>
                             ) : (
                               <span className="bg-[#4dbd74] text-white px-2 py-1 text-xs rounded-full">
-                                 COMPLETED
+                                ✅ COMPLETED
                               </span>
                             )}
                           </td>
@@ -271,35 +256,74 @@ const handleDownload = (data) => {
                           </td>
                         </tr>
 
-                        {/* EXPANDED ROW */}
+                        {/* 🔥 FIX 5: EXPANDED ROW — TOTAL, PENDING, NONWA, REJECTED, SUCCESS + Files */}
                         {openRow === i && (
                           <tr>
                             <td colSpan="7" className="bg-gray-100">
                               <div className="p-3 text-left">
 
-                                {/* Files */}
+                                {/* 🔥 Stats badges — Pending instead of Failed */}
+                                <div className="flex gap-2 flex-wrap justify-center mb-3">
+                                  <span className="bg-[#20A8D8] text-white px-3 py-1 rounded text-sm font-semibold">
+                                    📊 TOTAL {e.total || 0}
+                                  </span>
+                                  <span className="bg-[#4DBD74] text-white px-3 py-1 rounded text-sm font-semibold">
+                                    ✅ SUCCESS {e.success || 0}
+                                  </span>
+                                  <span className="bg-orange-400 text-white px-3 py-1 rounded text-sm font-semibold">
+                                    ⏳ PENDING {e.pending || 0}
+                                  </span>
+                                  <span className="bg-gray-500 text-white px-3 py-1 rounded text-sm font-semibold">
+                                    📵 NONWA {e.nonwa || 0}
+                                  </span>
+                                  <span className="bg-[#F86C6B] text-white px-3 py-1 rounded text-sm font-semibold">
+                                    🚫 REJECTED {e.rejected || 0}
+                                  </span>
+                                </div>
+
+                                {/* 🔥 FIX 5: Files section — image preview, video, pdf */}
                                 {(e.file_urls || []).length > 0 && (
-                                  <div className="mb-3">
-                                    <b>Files:</b>
-                                    <div className="flex gap-2 mt-1 flex-wrap">
-                                      {e.file_urls.map((url, fi) => (
-                                        <a key={fi} href={url} target="_blank" rel="noreferrer"
-                                          className="text-blue-500 text-xs underline">
-                                          File {fi + 1}
-                                        </a>
-                                      ))}
+                                  <div className="mt-2">
+                                    <b className="text-gray-700 text-sm block mb-2">📎 Attachments:</b>
+                                    <div className="flex gap-3 flex-wrap">
+                                      {e.file_urls.map((url, fi) => {
+                                        const type = getFileType(url);
+                                        return (
+                                          <div key={fi} className="border border-gray-300 rounded overflow-hidden bg-white shadow-sm">
+                                            {type === "image" ? (
+                                              <a href={url} target="_blank" rel="noreferrer">
+                                                <img
+                                                  src={url}
+                                                  alt={`img-${fi}`}
+                                                  className="w-[80px] h-[80px] object-cover"
+                                                  onError={(e) => { e.target.style.display = "none"; }}
+                                                />
+                                              </a>
+                                            ) : type === "video" ? (
+                                              <a href={url} target="_blank" rel="noreferrer"
+                                                className="flex flex-col items-center justify-center w-[80px] h-[80px] bg-gray-100 text-gray-600 text-xs gap-1 hover:bg-gray-200">
+                                                <span className="text-2xl">🎬</span>
+                                                <span>Video</span>
+                                              </a>
+                                            ) : type === "pdf" ? (
+                                              <a href={url} target="_blank" rel="noreferrer"
+                                                className="flex flex-col items-center justify-center w-[80px] h-[80px] bg-gray-100 text-gray-600 text-xs gap-1 hover:bg-gray-200">
+                                                <span className="text-2xl">📄</span>
+                                                <span>PDF</span>
+                                              </a>
+                                            ) : (
+                                              <a href={url} target="_blank" rel="noreferrer"
+                                                className="flex flex-col items-center justify-center w-[80px] h-[80px] bg-gray-100 text-blue-500 text-xs gap-1 hover:bg-gray-200 underline">
+                                                <span className="text-2xl">📎</span>
+                                                <span>File {fi + 1}</span>
+                                              </a>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 )}
-
-                                {/* Stats */}
-                                <div className="flex gap-2 mt-2 flex-wrap justify-center">
-                                  <span className="bg-[#20A8D8] text-white px-3 py-1">TOTAL {e.total || 0}</span>
-                                  <span className="bg-[#F86C6B] text-white px-3 py-1">NONWA {e.nonwa || 0}</span>
-                                  <span className="bg-gray-500 text-white px-3 py-1">FAILED {e.failed || 0}</span>
-                                  <span className="bg-orange-400 text-white px-3 py-1">REJECTED {e.rejected || 0}</span>
-                                  <span className="bg-[#4DBD74] text-white px-3 py-1">SUCCESS {e.success || 0}</span>
-                                </div>
 
                                 {/* Pending message */}
                                 {e.status === "pending" && (
