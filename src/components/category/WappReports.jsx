@@ -238,7 +238,7 @@ const WappReports = () => {
                               </span>
                             ) : (
                               <span className="bg-[#4dbd74] text-white px-2 py-1 text-xs rounded-full">
-                                ✅ COMPLETED
+                                 COMPLETED
                               </span>
                             )}
                           </td>

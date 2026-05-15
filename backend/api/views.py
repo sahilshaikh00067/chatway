@@ -880,7 +880,7 @@ def send_whatsapp(request):
 
         try:
             # 🔥 FIX 3: notify_admin mein failed pass karo (pending ke roop mein)
-          if total > 15:
+         if total > 15:
             notify_admin(
                 campaign_name, total, success, failed, nonwa, rejected, user.username,
                 credit_left="unlimited" if user.is_admin() else user.credit,
