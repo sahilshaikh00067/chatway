@@ -469,6 +469,7 @@ def upload_to_chatway(file, token):
         files = {"file": (file.name, file.read(), file.content_type or "application/octet-stream")}
         res   = requests.post(url, files=files, timeout=30)
         data  = res.json()
+        print(f"CHATWAY UPLOAD RESPONSE: {data}")  # ← YEH ADD KARO
         if data.get("status") == "success":
             file_url = data.get("url") or data.get("file_url") or data.get("link")
             return file_url, file.name
