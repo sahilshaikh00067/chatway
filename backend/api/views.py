@@ -460,33 +460,35 @@ def delete_user(request):
 
 
 # ─────────────────────────────────────────
-# FILE UPLOAD HELPERS
+# FILE UPLOAD HELPERS  ← SIRF YAHAN FIX HAI
 # ─────────────────────────────────────────
-def upload_to_chatway(file, token):
+def upload_to_chatway(file_name, file_bytes, content_type, token):
     try:
-        file.seek(0)
         url   = f"https://int.chatway.in/api/file-upload?username={USERNAME}&token={token}"
-        files = {"file": (file.name, file.read(), file.content_type or "application/octet-stream")}
+        files = {"file": (file_name, file_bytes, content_type)}
         res   = requests.post(url, files=files, timeout=30)
         data  = res.json()
-        print(f"CHATWAY UPLOAD RESPONSE: {data}")  # ← YEH ADD KARO
+        print(f"CHATWAY UPLOAD RESPONSE: {data}")
         if data.get("status") == "success":
             file_url = data.get("url") or data.get("file_url") or data.get("link")
-            return file_url, file.name
+            return file_url, file_name
         return None, None
     except Exception as e:
         print(f"Chatway upload error: {e}")
         return None, None
 
 
-def upload_to_catbox(file):
+def upload_to_catbox(file_name, file_bytes, content_type):
     try:
-        file.seek(0)
-        files = {"fileToUpload": (file.name, file.read(), file.content_type or "application/octet-stream")}
-        res   = requests.post("https://catbox.moe/user/api.php",
-                              files=files, data={"reqtype": "fileupload", "userhash": ""}, timeout=30)
+        files = {"fileToUpload": (file_name, file_bytes, content_type)}
+        res   = requests.post(
+            "https://catbox.moe/user/api.php",
+            files=files,
+            data={"reqtype": "fileupload", "userhash": ""},
+            timeout=30
+        )
         if res.status_code == 200 and res.text.startswith("https://"):
-            return res.text.strip(), file.name
+            return res.text.strip(), file_name
         return None, None
     except Exception as e:
         print(f"Catbox error: {e}")
@@ -494,16 +496,25 @@ def upload_to_catbox(file):
 
 
 def upload_file(file, images_only=False):
-    url, name = upload_to_chatway(file, TOKENS[0])
+    # Ek baar hi poora file memory mein read karo — seek issue fix
+    file.seek(0)
+    file_bytes   = file.read()
+    file_name    = file.name
+    content_type = file.content_type or "application/octet-stream"
+
+    # Saare tokens try karo chatway pe
+    for token in TOKENS:
+        url, name = upload_to_chatway(file_name, file_bytes, content_type, token)
+        if url:
+            return url, name
+
+    # Catbox fallback — images ke liye bhi (images_only ignore)
+    url, name = upload_to_catbox(file_name, file_bytes, content_type)
     if url:
         return url, name
-    if images_only:
-        for token in TOKENS[1:]:
-            url, name = upload_to_chatway(file, token)
-            if url:
-                return url, name
-        return None, None
-    return upload_to_catbox(file)
+
+    print(f"UPLOAD FAILED: {file_name}")
+    return None, None
 
 
 # ─────────────────────────────────────────
@@ -751,8 +762,11 @@ def send_whatsapp(request):
 
             file_list = []
             for img in image_files[:4]:
-                url, name = upload_file(img, images_only=True)
-                if url: file_list.append((url, name))
+                url, name = upload_file(img)
+                if url:
+                    file_list.append((url, name))
+                else:
+                    print(f"Image upload failed (pending mode): {img.name}")
             if video_file:
                 url, name = upload_file(video_file)
                 if url: file_list.append((url, name))
@@ -818,14 +832,19 @@ def send_whatsapp(request):
 
         file_list = []
         for img in image_files[:4]:
-            url, name = upload_file(img, images_only=True)
-            if url: file_list.append((url, name))
+            url, name = upload_file(img)
+            if url:
+                file_list.append((url, name))
+            else:
+                print(f"Image upload failed (normal mode): {img.name}")
         if video_file:
             url, name = upload_file(video_file)
             if url: file_list.append((url, name))
         if pdf_file:
             url, name = upload_file(pdf_file)
             if url: file_list.append((url, name))
+
+        print(f"FILES TO SEND: {len(file_list)} — {[(n) for _, n in file_list]}")
 
         success  = 0
         failed   = 0
@@ -847,7 +866,6 @@ def send_whatsapp(request):
             elif r["status"] == "rejected": rejected += 1
             else:                           failed   += 1
 
-        # 🔥 FIX 1: failed status ko pending dikhaao number results mein
         number_results = [
             {"number": num, "status": "pending" if r["status"] == "failed" else r["status"]}
             for num, r in zip(numbers, results)
@@ -870,7 +888,6 @@ def send_whatsapp(request):
                 total=total,
                 success=success,
                 failed=failed,
-                # 🔥 FIX 2: failed count bhi pending_count mein daalo
                 pending_count=failed,
                 nonwa=nonwa,
                 rejected=rejected,
@@ -880,13 +897,12 @@ def send_whatsapp(request):
             )
 
         try:
-            # 🔥 FIX 3: notify_admin mein failed pass karo (pending ke roop mein)
-         if total > 15:
-            notify_admin(
-                campaign_name, total, success, failed, nonwa, rejected, user.username,
-                credit_left="unlimited" if user.is_admin() else user.credit,
-                is_pending=False,
-            )
+            if total > 15:
+                notify_admin(
+                    campaign_name, total, success, failed, nonwa, rejected, user.username,
+                    credit_left="unlimited" if user.is_admin() else user.credit,
+                    is_pending=False,
+                )
         except:
             pass
 
