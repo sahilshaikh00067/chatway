@@ -578,7 +578,7 @@ def send_single_file(args):
                     f"&file_url={requests.utils.quote(file_url, safe='')}"
                     f"&file_name={requests.utils.quote(file_name, safe='')}"
                 )
-                res = requests.get(url, timeout=10)
+                res = requests.get(url, timeout=15)
                 txt = res.text.lower()
                 if "not exist" in txt:  return {"status": "nonwa"}
                 if "reject"    in txt:  return {"status": "rejected"}
@@ -590,20 +590,23 @@ def send_single_file(args):
         return {"status": "failed"}
 
 
+import time
+
 def send_all_files_to_number(args):
     number, message, file_list, token_index = args
     results = []
     if message:
         results.append(send_single_text((number, message, token_index)))
+        time.sleep(0.5)
     for i, (file_url, file_name) in enumerate(file_list):
         results.append(send_single_file((number, "", file_url, file_name, (token_index + i) % TOKEN_COUNT)))
-
+        if i < len(file_list) - 1:
+            time.sleep(0.5)
     statuses = [r["status"] for r in results]
     if "success"  in statuses: return {"status": "success"}
     if "nonwa"    in statuses: return {"status": "nonwa"}
     if "rejected" in statuses: return {"status": "rejected"}
     return {"status": "failed"}
-
 
 # ─────────────────────────────────────────
 # COMPLETE CAMPAIGN (Manual by Admin)
