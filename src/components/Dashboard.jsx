@@ -2,8 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 
 const BASE    = "https://chatway-backend.onrender.com/api";
-// 🔥 FIX 1: "Failed" → "Pending" colors same rakhte hain
-const COLORS  = ["#f97316", "#4DBD74", "#20A8D8", "#F86C6B", "#6366f1"];
+const COLORS  = ["#F86C6B", "#4DBD74", "#20A8D8", "#6b7280", "#6366f1"];
 const filters = ["Today", "Yesterday", "Last 7 Days", "Last 30 Days", "Custom Range"];
 
 const Dashboard = () => {
@@ -11,7 +10,7 @@ const Dashboard = () => {
   const [fromDate, setFromDate]             = useState("");
   const [toDate, setToDate]                 = useState("");
   const [allCampaigns, setAllCampaigns]     = useState([]);
-  const [stats, setStats]                   = useState({ total: 0, success: 0, pending: 0, nonwa: 0, rejected: 0 });
+  const [stats, setStats]                   = useState({ total: 0, success: 0, failed: 0, nonwa: 0, rejected: 0 });
   const intervalRef                         = useRef(null);
 
   const fetchCampaigns = async () => {
@@ -64,29 +63,27 @@ const Dashboard = () => {
       end   = new Date(toDate).getTime() + 86399999;
     }
 
-    // Completed campaigns ke stats
     const filtered = allCampaigns.filter(
       (c) => c.status === "completed" && c.rawDate >= start && c.rawDate <= end
     );
 
-    let total = 0, success = 0, pending = 0, nonwa = 0, rejected = 0;
+    let total = 0, success = 0, failed = 0, nonwa = 0, rejected = 0;
     filtered.forEach((c) => {
       total    += c.total    || 0;
       success  += c.success  || 0;
-      // 🔥 FIX 1: pending field use karo (not failed)
-      pending  += c.pending  || 0;
+      // failed = pending_count (jo messages nahi gaye)
+      failed   += c.pending  || c.pending_count || 0;
       nonwa    += c.nonwa    || 0;
       rejected += c.rejected || 0;
     });
 
-    setStats({ total, success, pending, nonwa, rejected });
+    setStats({ total, success, failed, nonwa, rejected });
   }, [selectedFilter, fromDate, toDate, allCampaigns]);
 
   const hasPending = allCampaigns.some((c) => c.status === "pending");
 
-  // 🔥 FIX 1: Pie chart mein "Pending" instead of "Failed"
   const pieData = [
-    { name: "Pending",  value: stats.pending  },
+    { name: "Failed",   value: stats.failed   },
     { name: "Success",  value: stats.success  },
     { name: "NonWA",    value: stats.nonwa    },
     { name: "Rejected", value: stats.rejected },
@@ -135,14 +132,14 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* 🔥 STATS CARDS — Failed → Pending */}
+        {/* STATS CARDS — Failed instead of Pending */}
         <div className="grid grid-cols-5 gap-4 mb-6">
           {[
             { label: "Total",    value: stats.total,    color: "bg-[#20A8D8]" },
             { label: "Success",  value: stats.success,  color: "bg-[#4DBD74]" },
-            { label: "Pending",  value: stats.pending,  color: "bg-orange-400" },
+            { label: "Failed",   value: stats.failed,   color: "bg-[#F86C6B]" },
             { label: "NonWA",    value: stats.nonwa,    color: "bg-gray-500"   },
-            { label: "Rejected", value: stats.rejected, color: "bg-[#F86C6B]"  },
+            { label: "Rejected", value: stats.rejected, color: "bg-[#6366f1]"  },
           ].map((s) => (
             <div key={s.label} className={`${s.color} text-white rounded-lg p-4 text-center shadow`}>
               <div className="text-3xl font-bold">{s.value}</div>
@@ -181,9 +178,9 @@ const Dashboard = () => {
                 {[
                   { label: "Total",    value: stats.total,    color: "text-[#20A8D8]" },
                   { label: "Success",  value: stats.success,  color: "text-[#4DBD74]" },
-                  { label: "Pending",  value: stats.pending,  color: "text-orange-400" },
+                  { label: "Failed",   value: stats.failed,   color: "text-[#F86C6B]" },
                   { label: "NonWA",    value: stats.nonwa,    color: "text-gray-500"   },
-                  { label: "Rejected", value: stats.rejected, color: "text-[#F86C6B]"  },
+                  { label: "Rejected", value: stats.rejected, color: "text-[#6366f1]"  },
                 ].map((row) => (
                   <tr key={row.label} className="border-b border-gray-200 hover:bg-gray-50">
                     <td className={`p-3 border-r border-gray-200 font-medium ${row.color}`}>{row.label}</td>

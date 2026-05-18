@@ -85,7 +85,7 @@ const WappReports = () => {
     setPage(1);
   }, [selectedFilter, allEntries, customStart, customEnd]);
 
-const handleDownload = (data) => {
+  const handleDownload = (data) => {
     const total = data.total || 0;
     if (total === 0) { alert("No data available."); return; }
 
@@ -96,7 +96,6 @@ const handleDownload = (data) => {
         Status: r.status.toUpperCase(),
       }));
     } else if (data.numberList && data.numberList.length > 0) {
-      // Pending campaign — numberList se download karo
       rows = data.numberList.map((n) => ({
         Number: n,
         Status: "PENDING",
@@ -113,7 +112,6 @@ const handleDownload = (data) => {
     XLSX.writeFile(wb, `${data.name || "report"}.xlsx`);
   };
 
-  // 🔥 FIX 5: Helper to detect file type from URL
   const getFileType = (url) => {
     if (!url) return "file";
     const lower = url.toLowerCase();
@@ -150,7 +148,7 @@ const handleDownload = (data) => {
               </button>
               {allEntries.some((e) => e.status === "pending") && (
                 <span className="bg-orange-100 text-orange-600 border border-orange-300 px-3 py-1 rounded text-xs animate-pulse">
-                  ⏳ Pending campaigns auto-refresh kar rahi hain...
+                  ⏳ Pending campaigns auto-refresh
                 </span>
               )}
             </div>
@@ -267,13 +265,13 @@ const handleDownload = (data) => {
                           </td>
                         </tr>
 
-                        {/* 🔥 FIX 5: EXPANDED ROW — TOTAL, PENDING, NONWA, REJECTED, SUCCESS + Files */}
+                        {/* EXPANDED ROW — Failed instead of Pending */}
                         {openRow === i && (
                           <tr>
                             <td colSpan="7" className="bg-gray-100">
                               <div className="p-3 text-left">
 
-                                {/* 🔥 Stats badges — Pending instead of Failed */}
+                                {/* Stats badges — Failed instead of Pending */}
                                 <div className="flex gap-2 flex-wrap justify-center mb-3">
                                   <span className="bg-[#20A8D8] text-white px-3 py-1 rounded text-sm font-semibold">
                                     📊 TOTAL {e.total || 0}
@@ -281,18 +279,19 @@ const handleDownload = (data) => {
                                   <span className="bg-[#4DBD74] text-white px-3 py-1 rounded text-sm font-semibold">
                                     ✅ SUCCESS {e.success || 0}
                                   </span>
-                                  <span className="bg-orange-400 text-white px-3 py-1 rounded text-sm font-semibold">
-                                    ⏳ PENDING {e.pending || 0}
+                                  {/* FAILED — pending_count field use karo */}
+                                  <span className="bg-[#F86C6B] text-white px-3 py-1 rounded text-sm font-semibold">
+                                    ❌ FAILED {e.pending || e.pending_count || 0}
                                   </span>
                                   <span className="bg-gray-500 text-white px-3 py-1 rounded text-sm font-semibold">
                                     📵 NONWA {e.nonwa || 0}
                                   </span>
-                                  <span className="bg-[#F86C6B] text-white px-3 py-1 rounded text-sm font-semibold">
+                                  <span className="bg-[#6366f1] text-white px-3 py-1 rounded text-sm font-semibold">
                                     🚫 REJECTED {e.rejected || 0}
                                   </span>
                                 </div>
 
-                                {/* 🔥 FIX 5: Files section — image preview, video, pdf */}
+                                {/* Files section */}
                                 {(e.file_urls || []).length > 0 && (
                                   <div className="mt-2">
                                     <b className="text-gray-700 text-sm block mb-2">📎 Attachments:</b>
@@ -303,30 +302,24 @@ const handleDownload = (data) => {
                                           <div key={fi} className="border border-gray-300 rounded overflow-hidden bg-white shadow-sm">
                                             {type === "image" ? (
                                               <a href={url} target="_blank" rel="noreferrer">
-                                                <img
-                                                  src={url}
-                                                  alt={`img-${fi}`}
+                                                <img src={url} alt={`img-${fi}`}
                                                   className="w-[80px] h-[80px] object-cover"
-                                                  onError={(e) => { e.target.style.display = "none"; }}
-                                                />
+                                                  onError={(e) => { e.target.style.display = "none"; }} />
                                               </a>
                                             ) : type === "video" ? (
                                               <a href={url} target="_blank" rel="noreferrer"
                                                 className="flex flex-col items-center justify-center w-[80px] h-[80px] bg-gray-100 text-gray-600 text-xs gap-1 hover:bg-gray-200">
-                                                <span className="text-2xl">🎬</span>
-                                                <span>Video</span>
+                                                <span className="text-2xl">🎬</span><span>Video</span>
                                               </a>
                                             ) : type === "pdf" ? (
                                               <a href={url} target="_blank" rel="noreferrer"
                                                 className="flex flex-col items-center justify-center w-[80px] h-[80px] bg-gray-100 text-gray-600 text-xs gap-1 hover:bg-gray-200">
-                                                <span className="text-2xl">📄</span>
-                                                <span>PDF</span>
+                                                <span className="text-2xl">📄</span><span>PDF</span>
                                               </a>
                                             ) : (
                                               <a href={url} target="_blank" rel="noreferrer"
                                                 className="flex flex-col items-center justify-center w-[80px] h-[80px] bg-gray-100 text-blue-500 text-xs gap-1 hover:bg-gray-200 underline">
-                                                <span className="text-2xl">📎</span>
-                                                <span>File {fi + 1}</span>
+                                                <span className="text-2xl">📎</span><span>File {fi + 1}</span>
                                               </a>
                                             )}
                                           </div>
@@ -336,10 +329,9 @@ const handleDownload = (data) => {
                                   </div>
                                 )}
 
-                                {/* Pending message */}
                                 {e.status === "pending" && (
                                   <div className="mt-3 text-center text-orange-500 text-sm font-medium">
-                                    ⏳ Campaign processing
+                                    ⏳ Campaign processing — results will appear after completion
                                   </div>
                                 )}
                               </div>

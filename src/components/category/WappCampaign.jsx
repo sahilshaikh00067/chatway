@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { FaComments } from "react-icons/fa";
 
@@ -6,11 +6,61 @@ export default function WappCampaign() {
   const [campaignName, setCampaignName] = useState("");
   const [numbers, setNumbers] = useState("");
   const [message, setMessage] = useState("");
-  // 🔥 FIX 3: showConfirm hata diya — turant showSuccess dikha
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState({ images: [], video: null, pdf: null });
 
+  // ─────────────────────────────────────────
+  // NUMBER VALIDATION & CLEANING
+  // ─────────────────────────────────────────
+  // Valid: exactly 10-digit Indian mobile (starts with 6/7/8/9)
+  // OR already has 91 prefix → strip it then validate
+  const isValidIndianMobile = (raw) => {
+    let n = raw.replace(/\D/g, ""); // only digits
+    if (n.startsWith("91") && n.length === 12) n = n.slice(2);
+    if (n.startsWith("0") && n.length === 11) n = n.slice(1);
+    return n.length === 10 && /^[6-9]/.test(n) ? n : null;
+  };
+
+  // Parse textarea → deduplicated valid numbers
+  const getParsedNumbers = useCallback((text) => {
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    const seen  = new Set();
+    const valid = [];
+    const invalid = [];
+
+    lines.forEach((line) => {
+      const clean = isValidIndianMobile(line);
+      if (clean) {
+        if (!seen.has(clean)) {
+          seen.add(clean);
+          valid.push(clean);
+        }
+        // duplicates silently skipped
+      } else {
+        invalid.push(line);
+      }
+    });
+
+    return { valid, invalid, total: lines.length };
+  }, []);
+
+  const { valid: validNums, invalid: invalidNums, total: totalEntered } = getParsedNumbers(numbers);
+  const duplicateCount = totalEntered - validNums.length - invalidNums.length;
+
+  // When user pastes/types — auto-clean on blur
+  const handleNumbersChange = (e) => {
+    setNumbers(e.target.value);
+  };
+
+  // Auto-clean button: remove invalids & duplicates from textarea
+  const handleAutoClean = () => {
+    setNumbers(validNums.join("\n"));
+  };
+
+  // ─────────────────────────────────────────
+  // FILE UPLOAD
+  // ─────────────────────────────────────────
   const handleDrop = (acceptedFiles, type) => {
     if (type === "image") {
       const validImages = acceptedFiles.filter((f) => f.size <= 1 * 1024 * 1024);
@@ -40,7 +90,7 @@ export default function WappCampaign() {
       accept: type === "image" ? { "image/*": [] } : type === "video" ? { "video/*": [] } : { "application/pdf": [] },
       maxFiles: type === "image" ? 4 : 1,
     });
-    const file = type === "image" ? files.images : files[type];
+    const file   = type === "image" ? files.images : files[type];
     const hasFile = type === "image" ? files.images.length > 0 : !!file;
 
     return (
@@ -94,18 +144,20 @@ export default function WappCampaign() {
     );
   };
 
-  // 🔥 FIX 3: Send click pe TURANT popup dikha, background mein API call
+  // ─────────────────────────────────────────
+  // SEND
+  // ─────────────────────────────────────────
   const handleSendClick = () => {
     if (!campaignName || !numbers || !message) { alert("Fill all fields ❌"); return; }
-
-    const numberList = [...new Set(numbers.split("\n").map((n) => n.trim()).filter((n) => n !== ""))];
-    if (numberList.length === 0) { alert("Please enter numbers ❌"); return; }
-
-    // TURANT success popup dikha
+    if (validNums.length === 0) { alert("No valid numbers found ❌"); return; }
+    if (invalidNums.length > 0) {
+      const proceed = window.confirm(
+        `⚠️ ${invalidNums.length} invalid number(s) will be skipped.\n${duplicateCount > 0 ? `${duplicateCount} duplicate(s) also removed.\n` : ""}Only ${validNums.length} valid numbers will be sent.\n\nProceed?`
+      );
+      if (!proceed) return;
+    }
     setShowSuccess(true);
-
-    // Background mein API call — UI block nahi hoga
-    sendCampaignInBackground(numberList);
+    sendCampaignInBackground(validNums);
   };
 
   const sendCampaignInBackground = async (numberList) => {
@@ -126,13 +178,11 @@ export default function WappCampaign() {
       const res  = await fetch("https://chatway-backend.onrender.com/api/send-whatsapp/", { method: "POST", body: formData });
       const data = await res.json();
 
-      // Credit update silently
       if (data.credit_left !== undefined) {
         const updatedUser = { ...currentUser, credit: data.credit_left };
         sessionStorage.setItem("user", JSON.stringify(updatedUser));
       }
 
-      // Form reset
       setCampaignName("");
       setNumbers("");
       setMessage("");
@@ -144,104 +194,45 @@ export default function WappCampaign() {
     setLoading(false);
   };
 
+  // ─────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#f1f1f1] relative">
 
       <style>{`
-        @keyframes wc-backdrop-in {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        @keyframes wc-slide-up {
-          from { opacity: 0; transform: translateY(40px) scale(0.94); }
-          to   { opacity: 1; transform: translateY(0)    scale(1);    }
-        }
-        @keyframes wc-check-pop {
-          0%   { transform: scale(0) rotate(-15deg); }
-          65%  { transform: scale(1.25) rotate(6deg); }
-          100% { transform: scale(1)   rotate(0deg); }
-        }
-        @keyframes wc-pulse-ring {
-          0%,100% { box-shadow: 0 0 0 0   #4DBD7455, 0 6px 24px #4DBD7433; }
-          50%     { box-shadow: 0 0 0 10px transparent, 0 6px 24px #4DBD7455; }
-        }
-        @keyframes wc-shimmer {
-          0%   { background-position: -300% center; }
-          100% { background-position:  300% center; }
-        }
-        @keyframes wc-spin {
-          to { transform: rotate(360deg); }
-        }
-        .wc-backdrop { animation: wc-backdrop-in 0.22s ease forwards; }
-        .wc-modal    { animation: wc-slide-up 0.38s cubic-bezier(0.34, 1.3, 0.64, 1) forwards; }
-        .wc-check-icon {
-          animation: wc-check-pop 0.45s cubic-bezier(0.34, 1.5, 0.64, 1) forwards,
-                     wc-pulse-ring 2.2s ease-in-out 0.45s infinite;
-        }
-        .wc-btn-send {
-          position: relative; overflow: hidden;
-          transition: transform 0.18s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.18s ease !important;
-        }
-        .wc-btn-send:hover:not(:disabled) {
-          transform: translateY(-2px) scale(1.03) !important;
-          box-shadow: 0 8px 24px #20A8D866 !important;
-        }
-        .wc-btn-send:active:not(:disabled) { transform: translateY(0) scale(0.98) !important; }
-        .wc-btn-send::after {
-          content: ""; position: absolute; inset: 0;
-          background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.22) 50%, transparent 60%);
-          background-size: 300% 100%;
-          animation: wc-shimmer 2.8s infinite;
-          pointer-events: none;
-        }
-        .wc-btn-ok {
-          transition: transform 0.15s ease, box-shadow 0.15s ease !important;
-        }
-        .wc-btn-ok:hover {
-          transform: translateY(-2px) !important;
-          box-shadow: 0 8px 24px #20A8D866 !important;
-        }
-        .wc-btn-ok:active { transform: translateY(0) scale(0.98) !important; }
-        .wc-spinner {
-          display: inline-block; width: 13px; height: 13px;
-          border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
-          border-radius: 50%; animation: wc-spin 0.7s linear infinite;
-        }
+        @keyframes wc-backdrop-in { from{opacity:0} to{opacity:1} }
+        @keyframes wc-slide-up { from{opacity:0;transform:translateY(40px) scale(0.94)} to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes wc-check-pop { 0%{transform:scale(0) rotate(-15deg)} 65%{transform:scale(1.25) rotate(6deg)} 100%{transform:scale(1) rotate(0deg)} }
+        @keyframes wc-pulse-ring { 0%,100%{box-shadow:0 0 0 0 #4DBD7455,0 6px 24px #4DBD7433} 50%{box-shadow:0 0 0 10px transparent,0 6px 24px #4DBD7455} }
+        @keyframes wc-shimmer { 0%{background-position:-300% center} 100%{background-position:300% center} }
+        @keyframes wc-spin { to{transform:rotate(360deg)} }
+        .wc-backdrop{animation:wc-backdrop-in 0.22s ease forwards}
+        .wc-modal{animation:wc-slide-up 0.38s cubic-bezier(0.34,1.3,0.64,1) forwards}
+        .wc-check-icon{animation:wc-check-pop 0.45s cubic-bezier(0.34,1.5,0.64,1) forwards,wc-pulse-ring 2.2s ease-in-out 0.45s infinite}
+        .wc-btn-ok{transition:transform 0.15s ease,box-shadow 0.15s ease!important}
+        .wc-btn-ok:hover{transform:translateY(-2px)!important;box-shadow:0 8px 24px #20A8D866!important}
+        .wc-btn-ok:active{transform:translateY(0) scale(0.98)!important}
+        .wc-spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:wc-spin 0.7s linear infinite}
+        .num-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600}
       `}</style>
 
-      {/* ══════════════════════════════════════════ */}
-      {/* 🔥 FIX 3: INSTANT SUCCESS POPUP           */}
-      {/* ══════════════════════════════════════════ */}
+      {/* SUCCESS POPUP */}
       {showSuccess && (
-        <div
-          className="wc-backdrop fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.52)", backdropFilter: "blur(5px)" }}
-        >
-          <div
-            className="wc-modal"
-            style={{
-              width: 400,
-              background: "linear-gradient(150deg, #ffffff 0%, #f3fdf7 100%)",
-              borderRadius: 20,
-              border: "1px solid #c5ebd5",
-              boxShadow:
-                "0 32px 80px rgba(0,0,0,0.18)," +
-                "0 0 0 1px rgba(255,255,255,0.9) inset," +
-                "0 2px 0 rgba(255,255,255,0.95) inset",
-              padding: "40px 32px 32px",
-              display: "flex", flexDirection: "column", alignItems: "center",
-            }}
-          >
-            <div
-              className="wc-check-icon"
-              style={{
-                width: 64, height: 64, borderRadius: "50%",
-                background: "linear-gradient(135deg, #4DBD74, #28a745)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#fff", fontSize: 28, fontWeight: 900,
-                marginBottom: 20,
-              }}
-            >✓</div>
+        <div className="wc-backdrop fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.52)", backdropFilter: "blur(5px)" }}>
+          <div className="wc-modal" style={{
+            width: 400, background: "linear-gradient(150deg,#ffffff 0%,#f3fdf7 100%)",
+            borderRadius: 20, border: "1px solid #c5ebd5",
+            boxShadow: "0 32px 80px rgba(0,0,0,0.18),0 0 0 1px rgba(255,255,255,0.9) inset,0 2px 0 rgba(255,255,255,0.95) inset",
+            padding: "40px 32px 32px", display: "flex", flexDirection: "column", alignItems: "center",
+          }}>
+            <div className="wc-check-icon" style={{
+              width: 64, height: 64, borderRadius: "50%",
+              background: "linear-gradient(135deg,#4DBD74,#28a745)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontSize: 28, fontWeight: 900, marginBottom: 20,
+            }}>✓</div>
 
             <h1 style={{ fontSize: 25, fontWeight: 800, color: "#1c2b3a", margin: "0 0 7px", letterSpacing: "-0.02em" }}>
               Campaign Sent!
@@ -255,24 +246,12 @@ export default function WappCampaign() {
                 Processing in background...
               </p>
             )}
-
-            <div style={{
-              width: "80%", height: 1,
-              background: "linear-gradient(90deg, transparent, #b8e8cb, transparent)",
-              marginBottom: 24,
-            }} />
-
-            <button
-              onClick={() => setShowSuccess(false)}
-              className="wc-btn-ok"
-              style={{
-                padding: "13px 38px",
-                background: "linear-gradient(135deg, #20A8D8, #1591bb)",
-                color: "#fff", border: "none", borderRadius: 10,
-                fontWeight: 700, fontSize: 13.5, cursor: "pointer",
-                boxShadow: "0 4px 14px #20A8D844",
-              }}
-            >🚀 Send Another Campaign</button>
+            <div style={{ width: "80%", height: 1, background: "linear-gradient(90deg,transparent,#b8e8cb,transparent)", marginBottom: 24 }} />
+            <button onClick={() => setShowSuccess(false)} className="wc-btn-ok" style={{
+              padding: "13px 38px", background: "linear-gradient(135deg,#20A8D8,#1591bb)",
+              color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13.5,
+              cursor: "pointer", boxShadow: "0 4px 14px #20A8D844",
+            }}>🚀 Send Another Campaign</button>
           </div>
         </div>
       )}
@@ -301,13 +280,49 @@ export default function WappCampaign() {
               </div>
 
               <div className="flex gap-5">
-                {/* NUMBERS */}
+                {/* NUMBERS PANEL */}
                 <div className="w-[22%]">
-                  <p className="mb-1 text-[18px]">Numbers:
-                    <span className="text-sm text-gray-400 ml-2">({numbers.split("\n").filter((n) => n.trim()).length} entered)</span>
-                  </p>
-                  <textarea value={numbers} onChange={(e) => setNumbers(e.target.value)}
-                    className="w-full h-[500px] border border-green-400 rounded px-2 py-2 text-[13px] outline-none resize-none" />
+                  {/* Number stats bar */}
+                  <div className="mb-1 flex flex-wrap items-center gap-1">
+                    <span className="text-[15px] font-medium">Numbers:</span>
+                    <span className="num-badge bg-green-100 text-green-700">✅ {validNums.length} valid</span>
+                    {invalidNums.length > 0 && (
+                      <span className="num-badge bg-red-100 text-red-600">❌ {invalidNums.length} invalid</span>
+                    )}
+                    {duplicateCount > 0 && (
+                      <span className="num-badge bg-yellow-100 text-yellow-700">♻️ {duplicateCount} dup</span>
+                    )}
+                  </div>
+
+                  <textarea
+                    value={numbers}
+                    onChange={handleNumbersChange}
+                    placeholder={"Enter numbers\none per line\n\nValid: 10-digit\nIndian mobile"}
+                    className="w-full h-[440px] border border-green-400 rounded px-2 py-2 text-[13px] outline-none resize-none"
+                  />
+
+                  {/* AUTO CLEAN BUTTON */}
+                  {(invalidNums.length > 0 || duplicateCount > 0) && (
+                    <button
+                      onClick={handleAutoClean}
+                      className="mt-2 w-full bg-red-500 hover:bg-red-600 text-white text-[12px] py-1.5 rounded font-semibold transition"
+                    >
+                      🧹 Remove {invalidNums.length + duplicateCount} Invalid/Duplicate
+                    </button>
+                  )}
+
+                  {/* Invalid number list preview */}
+                  {invalidNums.length > 0 && (
+                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-[11px] max-h-[80px] overflow-y-auto">
+                      <b className="text-red-600">Invalid numbers:</b>
+                      {invalidNums.slice(0, 10).map((n, i) => (
+                        <div key={i} className="text-red-500 truncate">{n}</div>
+                      ))}
+                      {invalidNums.length > 10 && (
+                        <div className="text-red-400">...and {invalidNums.length - 10} more</div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* RIGHT SIDE */}
@@ -338,15 +353,14 @@ export default function WappCampaign() {
 
               {/* SEND BUTTON */}
               <button onClick={handleSendClick}
-                className="mt-4 bg-[#20A8D8] hover:bg-[#1b8db8] text-white px-7 py-3 flex items-center gap-2">
-                Send Now
+                className="mt-4 bg-[#20A8D8] hover:bg-[#1b8db8] text-white px-7 py-3 flex items-center gap-2 rounded">
+                🚀 Send Now ({validNums.length} numbers)
               </button>
 
             </div>
           </div>
         </div>
       </div>
-
     </div>
   );
 }
