@@ -138,8 +138,8 @@ const Dashboard = () => {
             { label: "Total",    value: stats.total,    color: "bg-[#20A8D8]" },
             { label: "Success",  value: stats.success,  color: "bg-[#4DBD74]" },
             { label: "Failed",   value: stats.failed,   color: "bg-[#F86C6B]" },
-            { label: "NonWA",    value: stats.nonwa,    color: "bg-gray-500"   },
-            { label: "Rejected", value: stats.rejected, color: "bg-[#6366f1]"  },
+            { label: "NonWA",    value: stats.nonwa,    color: "bg-[#878784]"   },
+            { label: "Rejected", value: stats.rejected, color: "bg-[#f29950]"  },
           ].map((s) => (
             <div key={s.label} className={`${s.color} text-white rounded-lg p-4 text-center shadow`}>
               <div className="text-3xl font-bold">{s.value}</div>

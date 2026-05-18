@@ -1,67 +1,70 @@
 import React, { useState, useRef, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { FaComments } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 
 export default function WappDpCampaign() {
-  const dpRef = useRef(null);
-  const [dp, setDp] = useState(null);
-  const [images, setImages] = useState([]);
-  const [video, setVideo] = useState(null);
-  const [pdf, setPdf] = useState(null);
+  const navigate = useNavigate();
+  const dpRef    = useRef(null);
+
+  const [dp, setDp]           = useState(null);
+  const [images, setImages]   = useState([]);
+  const [video, setVideo]     = useState(null);
+  const [pdf, setPdf]         = useState(null);
 
   const [campaignName, setCampaignName] = useState("");
-  const [numbers, setNumbers] = useState("");
-  const [message, setMessage] = useState("");
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [numbers, setNumbers]           = useState("");
+  const [message, setMessage]           = useState("");
+  const [showConfirm, setShowConfirm]   = useState(false);   // ← NEW
+  const [showSuccess, setShowSuccess]   = useState(false);
+  const [loading, setLoading]           = useState(false);
 
   // ─────────────────────────────────────────
-  // NUMBER VALIDATION & CLEANING
+  // NUMBER VALIDATION
   // ─────────────────────────────────────────
   const isValidIndianMobile = (raw) => {
     let n = raw.replace(/\D/g, "");
     if (n.startsWith("91") && n.length === 12) n = n.slice(2);
-    if (n.startsWith("0") && n.length === 11) n = n.slice(1);
+    if (n.startsWith("0")  && n.length === 11) n = n.slice(1);
     return n.length === 10 && /^[6-9]/.test(n) ? n : null;
   };
 
-  const getParsedNumbers = useCallback((text) => {
-    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-    const seen = new Set();
-    const valid = [];
-    const invalid = [];
+  const handleNumbersChange = (e) => {
+    const raw   = e.target.value;
+    const lines = raw.split("\n");
+    const seen  = new Set();
+    const cleaned = [];
 
-    lines.forEach((line) => {
-      const clean = isValidIndianMobile(line);
-      if (clean) {
-        if (!seen.has(clean)) {
-          seen.add(clean);
-          valid.push(clean);
-        }
-      } else {
-        invalid.push(line);
-      }
+    lines.forEach((line, idx) => {
+      const isLast = idx === lines.length - 1;
+      if (isLast) { cleaned.push(line); return; }
+      const trimmed = line.trim();
+      if (trimmed === "") return;
+      const valid = isValidIndianMobile(trimmed);
+      if (valid && !seen.has(valid)) { seen.add(valid); cleaned.push(valid); }
     });
 
-    const duplicateCount = lines.length - valid.length - invalid.length;
-    return { valid, invalid, duplicateCount, total: lines.length };
-  }, []);
-
-  const { valid: validNums, invalid: invalidNums, duplicateCount } = getParsedNumbers(numbers);
-
-  const handleAutoClean = () => {
-    setNumbers(validNums.join("\n"));
+    setNumbers(cleaned.join("\n"));
   };
 
-  // ===============================
+  const getValidNums = useCallback(() => {
+    const seen  = new Set();
+    const valid = [];
+    numbers.split("\n").forEach((line) => {
+      const n = isValidIndianMobile(line.trim());
+      if (n && !seen.has(n)) { seen.add(n); valid.push(n); }
+    });
+    return valid;
+  }, [numbers]);
+
+  const validNums = getValidNums();
+
+  // ─────────────────────────────────────────
   // UPLOAD BOX
-  // ===============================
+  // ─────────────────────────────────────────
   const UploadBox = ({ title, type, color }) => {
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
-      accept:
-        type === "image" ? { "image/*": [] }
-          : type === "video" ? { "video/*": [] }
-            : { "application/pdf": [] },
+      accept:   type === "image" ? { "image/*": [] } : type === "video" ? { "video/*": [] } : { "application/pdf": [] },
       multiple: type === "image",
       onDrop: (acceptedFiles) => {
         if (!acceptedFiles.length) return;
@@ -83,31 +86,22 @@ export default function WappDpCampaign() {
       },
     });
 
-    const hasFile =
-      type === "image" ? images.length > 0
-        : type === "video" ? !!video
-          : !!pdf;
+    const hasFile = type === "image" ? images.length > 0 : type === "video" ? !!video : !!pdf;
 
     return (
       <div className="border border-gray-300 rounded overflow-hidden">
         <div className={`${color} text-white px-4 py-2 text-[13px] font-semibold flex justify-between items-center`}>
           <span>{title}</span>
           {hasFile && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (type === "image") setImages([]);
-                if (type === "video") setVideo(null);
-                if (type === "pdf") setPdf(null);
-              }}
-              className="text-white text-xs bg-black bg-opacity-30 px-2 py-0.5 rounded"
-            >✕ Remove</button>
+            <button onClick={(e) => {
+              e.stopPropagation();
+              if (type === "image") setImages([]);
+              if (type === "video") setVideo(null);
+              if (type === "pdf") setPdf(null);
+            }} className="text-white text-xs bg-black bg-opacity-30 px-2 py-0.5 rounded">✕ Remove</button>
           )}
         </div>
-        <div
-          {...getRootProps()}
-          className={`text-center py-1 text-[13px] cursor-pointer transition ${isDragActive ? "bg-blue-50" : "bg-gray-100 hover:bg-gray-200"}`}
-        >
+        <div {...getRootProps()} className={`text-center py-1 text-[13px] cursor-pointer transition ${isDragActive ? "bg-blue-50" : "bg-gray-100 hover:bg-gray-200"}`}>
           <input {...getInputProps()} />
           {hasFile ? (
             <div className="flex flex-col items-center gap-2 px-3">
@@ -140,7 +134,7 @@ export default function WappDpCampaign() {
               Drag & Drop {type} file <br />
               <span className="underline text-blue-500">Browse</span>
               <div className="text-xs text-gray-400 mt-1">
-                {type === "image" ? "Max 4 images • 1MB each" : type === "video" ? "Max 1 video • 3MB" : "Max 1 PDF • 1MB"}
+                {type === "image" ? "Max 2 images • 1MB each" : type === "video" ? "Max 1 video • 3MB" : "Max 1 PDF • 1MB"}
               </div>
             </div>
           )}
@@ -155,24 +149,30 @@ export default function WappDpCampaign() {
     if (dpRef.current) dpRef.current.value = "";
   };
 
-  // ===============================
-  // SEND — instant popup + background API
-  // ===============================
+  // ─────────────────────────────────────────
+  // SEND FLOW
+  // ─────────────────────────────────────────
+
+  // Step 1 — validate, then show "Are you sure?"
   const handleSendClick = () => {
     if (!campaignName || !numbers || !message) { alert("Fill all fields ❌"); return; }
     if (validNums.length === 0) { alert("No valid numbers found ❌"); return; }
+    setShowConfirm(true);
+  };
 
-    if (invalidNums.length > 0) {
-      const proceed = window.confirm(
-        `⚠️ ${invalidNums.length} invalid number(s) will be skipped.\n${duplicateCount > 0 ? `${duplicateCount} duplicate(s) also removed.\n` : ""}Only ${validNums.length} valid numbers will be sent.\n\nProceed?`
-      );
-      if (!proceed) return;
-    }
-
+  // Step 2 — YES
+  const handleConfirmYes = () => {
+    setShowConfirm(false);
     setShowSuccess(true);
     sendCampaignInBackground(validNums);
   };
 
+  // Step 2 — NO
+  const handleConfirmNo = () => {
+    setShowConfirm(false);
+  };
+
+  // Step 3 — API
   const sendCampaignInBackground = async (numberList) => {
     setLoading(true);
     const currentUser = JSON.parse(sessionStorage.getItem("user"));
@@ -205,9 +205,15 @@ export default function WappDpCampaign() {
     setLoading(false);
   };
 
-  // ===============================
+  // Step 4 — Navigate to dashboard
+  const handleGoToDashboard = () => {
+    setShowSuccess(false);
+    navigate("/dashboard");   // apna dashboard route yahan daalein
+  };
+
+  // ─────────────────────────────────────────
   // RENDER
-  // ===============================
+  // ─────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#f1f1f1] relative">
 
@@ -216,52 +222,86 @@ export default function WappDpCampaign() {
         @keyframes wc-slide-up { from{opacity:0;transform:translateY(40px) scale(0.94)} to{opacity:1;transform:translateY(0) scale(1)} }
         @keyframes wc-check-pop { 0%{transform:scale(0) rotate(-15deg)} 65%{transform:scale(1.25) rotate(6deg)} 100%{transform:scale(1) rotate(0deg)} }
         @keyframes wc-pulse-ring { 0%,100%{box-shadow:0 0 0 0 #4DBD7455,0 6px 24px #4DBD7433} 50%{box-shadow:0 0 0 10px transparent,0 6px 24px #4DBD7455} }
-        @keyframes wc-shimmer { 0%{background-position:-300% center} 100%{background-position:300% center} }
         @keyframes wc-spin { to{transform:rotate(360deg)} }
         .wc-backdrop{animation:wc-backdrop-in 0.22s ease forwards}
         .wc-modal{animation:wc-slide-up 0.38s cubic-bezier(0.34,1.3,0.64,1) forwards}
         .wc-check-icon{animation:wc-check-pop 0.45s cubic-bezier(0.34,1.5,0.64,1) forwards,wc-pulse-ring 2.2s ease-in-out 0.45s infinite}
-        .wc-btn-ok{transition:transform 0.15s ease,box-shadow 0.15s ease!important}
-        .wc-btn-ok:hover{transform:translateY(-2px)!important;box-shadow:0 8px 24px #20A8D866!important}
-        .wc-btn-ok:active{transform:translateY(0) scale(0.98)!important}
+        .wc-btn{transition:transform 0.15s ease,box-shadow 0.15s ease!important}
+        .wc-btn:hover{transform:translateY(-2px)!important}
+        .wc-btn:active{transform:translateY(0) scale(0.98)!important}
         .wc-spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:wc-spin 0.7s linear infinite}
-        .num-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600}
       `}</style>
 
-      {/* ══════════════════════════════════════════ */}
-      {/* INSTANT SUCCESS POPUP                     */}
-      {/* ══════════════════════════════════════════ */}
-      {showSuccess && (
-        <div
-          className="wc-backdrop fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.52)", backdropFilter: "blur(5px)" }}
-        >
-          <div
-            className="wc-modal"
-            style={{
-              width: 400,
-              background: "linear-gradient(150deg, #ffffff 0%, #f3fdf7 100%)",
-              borderRadius: 20,
-              border: "1px solid #c5ebd5",
-              boxShadow:
-                "0 32px 80px rgba(0,0,0,0.18)," +
-                "0 0 0 1px rgba(255,255,255,0.9) inset," +
-                "0 2px 0 rgba(255,255,255,0.95) inset",
-              padding: "40px 32px 32px",
-              display: "flex", flexDirection: "column", alignItems: "center",
-            }}
-          >
-            <div
-              className="wc-check-icon"
-              style={{
-                width: 64, height: 64, borderRadius: "50%",
-                background: "linear-gradient(135deg, #4DBD74, #28a745)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#fff", fontSize: 28, fontWeight: 900,
-                marginBottom: 20,
-              }}
-            >✓</div>
+      {/* ── CONFIRM POPUP ── */}
+      {showConfirm && (
+        <div className="wc-backdrop fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.52)", backdropFilter: "blur(5px)" }}>
+          <div className="wc-modal" style={{
+            width: 380, background: "#fff", borderRadius: 20,
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 32px 80px rgba(0,0,0,0.18)",
+            padding: "36px 32px 28px",
+            display: "flex", flexDirection: "column", alignItems: "center",
+          }}>
+            <div style={{
+              width: 60, height: 60, borderRadius: "50%",
+              background: "#FFF3CD", border: "2px solid #FFC107",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 28, marginBottom: 18,
+            }}>⚠️</div>
 
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1c2b3a", margin: "0 0 8px", textAlign: "center" }}>
+              Are you sure?
+            </h2>
+            <p style={{ color: "#64748b", fontSize: 13, margin: "0 0 6px", textAlign: "center" }}>
+              You are about to send campaign to
+            </p>
+            <p style={{ color: "#20A8D8", fontSize: 16, fontWeight: 700, margin: "0 0 24px" }}>
+              {validNums.length} numbers
+            </p>
+
+            <div style={{ width: "100%", height: 1, background: "#e2e8f0", marginBottom: 24 }} />
+
+            <div style={{ display: "flex", gap: 12, width: "100%" }}>
+              <button onClick={handleConfirmNo} className="wc-btn" style={{
+                flex: 1, padding: "12px 0",
+                background: "#f1f5f9", color: "#475569",
+                border: "1px solid #cbd5e1", borderRadius: 10,
+                fontWeight: 700, fontSize: 14, cursor: "pointer",
+              }}>
+                ✕ No, Cancel
+              </button>
+
+              <button onClick={handleConfirmYes} className="wc-btn" style={{
+                flex: 1, padding: "12px 0",
+                background: "linear-gradient(135deg, #4DBD74, #28a745)",
+                color: "#fff", border: "none", borderRadius: 10,
+                fontWeight: 700, fontSize: 14, cursor: "pointer",
+                boxShadow: "0 4px 14px #4DBD7444",
+              }}>
+                ✓ Yes, Send!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SUCCESS POPUP ── */}
+      {showSuccess && (
+        <div className="wc-backdrop fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.52)", backdropFilter: "blur(5px)" }}>
+          <div className="wc-modal" style={{
+            width: 400, background: "linear-gradient(150deg, #ffffff 0%, #f3fdf7 100%)",
+            borderRadius: 20, border: "1px solid #c5ebd5",
+            boxShadow: "0 32px 80px rgba(0,0,0,0.18)",
+            padding: "40px 32px 32px", display: "flex", flexDirection: "column", alignItems: "center",
+          }}>
+            <div className="wc-check-icon" style={{
+              width: 64, height: 64, borderRadius: "50%",
+              background: "linear-gradient(135deg, #4DBD74, #28a745)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontSize: 28, fontWeight: 900, marginBottom: 20,
+            }}>✓</div>
             <h1 style={{ fontSize: 25, fontWeight: 800, color: "#1c2b3a", margin: "0 0 7px", letterSpacing: "-0.02em" }}>
               Campaign Sent!
             </h1>
@@ -274,33 +314,21 @@ export default function WappDpCampaign() {
                 Processing in background...
               </p>
             )}
+            <div style={{ width: "80%", height: 1, background: "linear-gradient(90deg, transparent, #b8e8cb, transparent)", marginBottom: 24 }} />
 
-            <div style={{
-              width: "80%", height: 1,
-              background: "linear-gradient(90deg, transparent, #b8e8cb, transparent)",
-              marginBottom: 24,
-            }} />
-
-            <button
-              onClick={() => setShowSuccess(false)}
-              className="wc-btn-ok"
-              style={{
-                padding: "13px 38px",
-                background: "linear-gradient(135deg, #20A8D8, #1591bb)",
-                color: "#fff", border: "none", borderRadius: 10,
-                fontWeight: 700, fontSize: 13.5, cursor: "pointer",
-                boxShadow: "0 4px 14px #20A8D844",
-              }}
-            >🚀 Send Another Campaign</button>
+            <button onClick={handleGoToDashboard} className="wc-btn" style={{
+              padding: "13px 38px",
+              background: "linear-gradient(135deg, #20A8D8, #1591bb)",
+              color: "#fff", border: "none", borderRadius: 10,
+              fontWeight: 700, fontSize: 13.5, cursor: "pointer",
+              boxShadow: "0 4px 14px #20A8D844",
+            }}>📊 View Dashboard</button>
           </div>
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════ */}
-      {/* MAIN FORM                                            */}
-      {/* ══════════════════════════════════════════════════════ */}
-      <div className={`transition-all duration-200 ${showSuccess ? "pointer-events-none select-none opacity-40" : ""}`}>
-
+      {/* ── MAIN FORM ── */}
+      <div className={`transition-all duration-200 ${showConfirm || showSuccess ? "pointer-events-none select-none opacity-40" : ""}`}>
         <div className="bg-gray-200">
           <marquee className="text-red-600 py-2 text-[18px]">
             NOTE = All campaigns will be delivered Between 8A.M to 6P.M - (Monday to Saturday)
@@ -309,7 +337,6 @@ export default function WappDpCampaign() {
 
         <div className="p-6">
           <div className="bg-white border border-gray-300 rounded">
-
             <div className="px-4 py-3 text-[18px] font-semibold text-gray-800 bg-[#f0f3f5] flex items-center gap-2">
               <FaComments /> Wapp DP Campaign
             </div>
@@ -321,118 +348,62 @@ export default function WappDpCampaign() {
                 <div className="bg-[#F86C6B] text-white px-4 py-2 text-[15px] flex items-center whitespace-nowrap">
                   Campaign Name
                 </div>
-                <input
-                  value={campaignName}
-                  onChange={(e) => setCampaignName(e.target.value)}
+                <input value={campaignName} onChange={(e) => setCampaignName(e.target.value)}
                   placeholder="Enter campaign name..."
-                  className="border border-gray-300 w-[320px] h-[38px] px-3 outline-none"
-                />
+                  className="border border-gray-300 w-[320px] h-[38px] px-3 outline-none" />
               </div>
 
               <div className="flex gap-5">
 
                 {/* LEFT — NUMBERS */}
                 <div className="w-[22%]">
-                  {/* Number stats bar */}
-                  <div className="mb-1 flex flex-wrap items-center gap-1">
-                    <span className="text-[15px] font-medium">Numbers:</span>
-                    <span className="num-badge bg-green-100 text-green-700">✅ {validNums.length} valid</span>
-                    {invalidNums.length > 0 && (
-                      <span className="num-badge bg-red-100 text-red-600">❌ {invalidNums.length} invalid</span>
-                    )}
-                    {duplicateCount > 0 && (
-                      <span className="num-badge bg-yellow-100 text-yellow-700">♻️ {duplicateCount} dup</span>
-                    )}
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="text-[18px]">Numbers:</span>
+                    <span className="text-sm text-gray-400">({validNums.length} valid)</span>
                   </div>
-
-                  <textarea
-                    value={numbers}
-                    onChange={(e) => setNumbers(e.target.value)}
-                    placeholder={"Enter numbers\none per line\n\nValid: 10-digit\nIndian mobile"}
-                    className="w-full h-[420px] border border-green-400 rounded px-2 py-2 text-[13px] outline-none resize-none"
-                  />
-
-                  {/* AUTO CLEAN BUTTON */}
-                  {(invalidNums.length > 0 || duplicateCount > 0) && (
-                    <button
-                      onClick={handleAutoClean}
-                      className="mt-2 w-full bg-red-500 hover:bg-red-600 text-white text-[12px] py-1.5 rounded font-semibold transition"
-                    >
-                      🧹 Remove {invalidNums.length + duplicateCount} Invalid/Duplicate
-                    </button>
-                  )}
-
-                  {/* Invalid preview */}
-                  {invalidNums.length > 0 && (
-                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-[11px] max-h-[80px] overflow-y-auto">
-                      <b className="text-red-600">Invalid numbers:</b>
-                      {invalidNums.slice(0, 10).map((n, i) => (
-                        <div key={i} className="text-red-500 truncate">{n}</div>
-                      ))}
-                      {invalidNums.length > 10 && (
-                        <div className="text-red-400">...and {invalidNums.length - 10} more</div>
-                      )}
-                    </div>
-                  )}
+                  <textarea value={numbers} onChange={handleNumbersChange}
+                    placeholder={"Enter numbers\none per line\n\nOnly 10-digit\nIndian mobile\naccepted"}
+                    className="w-full h-[500px] border border-green-400 rounded px-2 py-2 text-[13px] outline-none resize-none" />
                 </div>
 
                 {/* RIGHT */}
                 <div className="w-[78%]">
                   <p className="mb-1 text-[18px]">Message:</p>
-                  <textarea
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
+                  <textarea value={message} onChange={(e) => setMessage(e.target.value)}
                     placeholder="Type your WhatsApp message here..."
-                    className="w-full h-[190px] border border-green-400 rounded px-2 py-2 text-[13px] outline-none resize-none mb-3"
-                  />
+                    className="w-full h-[190px] border border-green-400 rounded px-2 py-2 text-[13px] outline-none resize-none mb-3" />
 
                   {/* DP UPLOAD */}
                   <div className="border border-gray-300 rounded overflow-hidden mb-2">
                     <div className="bg-[#F86C6B] text-white px-4 py-2 text-[13px] font-semibold flex justify-between items-center">
                       <span>👤 DP Image — Profile picture set hogi (Max 1MB)</span>
                       {dp && (
-                        <button
-                          onClick={() => { setDp(null); if (dpRef.current) dpRef.current.value = ""; }}
-                          className="text-white text-xs bg-black bg-opacity-30 px-2 py-0.5 rounded"
-                        >✕ Remove</button>
+                        <button onClick={() => { setDp(null); if (dpRef.current) dpRef.current.value = ""; }}
+                          className="text-white text-xs bg-black bg-opacity-30 px-2 py-0.5 rounded">✕ Remove</button>
                       )}
                     </div>
                     <div className="bg-gray-100 px-3 py-3 flex items-center gap-3 flex-wrap">
-                      <input
-                        ref={dpRef}
-                        type="file"
-                        accept="image/*"
+                      <input ref={dpRef} type="file" accept="image/*"
                         onChange={(e) => {
                           const f = e.target.files[0];
                           if (!f) return;
                           if (f.size > 1 * 1024 * 1024) { alert("❌ DP must be under 1MB"); return; }
                           setDp(f);
                         }}
-                        className="text-[13px]"
-                      />
+                        className="text-[13px]" />
                       {dp && (
-                        <img
-                          src={URL.createObjectURL(dp)}
-                          alt="DP preview"
-                          className="w-12 h-12 rounded-full object-cover border-2 border-[#F86C6B]"
-                        />
+                        <img src={URL.createObjectURL(dp)} alt="DP preview"
+                          className="w-12 h-12 rounded-full object-cover border-2 border-[#F86C6B]" />
                       )}
                     </div>
                   </div>
 
-                  {/* IMAGE UPLOAD */}
-                  <UploadBox title="📷 Images (Max 4 • 1MB each)" type="image" color="bg-[#63C2DE]" />
-
+                  <UploadBox title="📷 Images (Max 2 • 1MB each)" type="image" color="bg-[#63C2DE]" />
                   <div className="flex gap-3 mt-2">
-                    <div className="w-1/2">
-                      <UploadBox title="🎬 Video (Max 3MB)" type="video" color="bg-[#4DBD74]" />
-                    </div>
-                    <div className="w-1/2">
-                      <UploadBox title="📄 PDF (Max 1MB)" type="pdf" color="bg-[#F86C6B]" />
-                    </div>
+                    <div className="w-1/2"><UploadBox title="🎬 Video (Max 3MB)" type="video" color="bg-[#4DBD74]" /></div>
+                    <div className="w-1/2"><UploadBox title="📄 PDF (Max 1MB)" type="pdf" color="bg-[#F86C6B]" /></div>
                   </div>
 
-                  {/* SUMMARY */}
                   {(dp || images.length > 0 || video || pdf) && (
                     <div className="mt-3 p-3 bg-green-50 border border-green-300 rounded text-sm">
                       <b className="text-green-700">📎 Attachment selected:</b>
@@ -448,10 +419,8 @@ export default function WappDpCampaign() {
               </div>
 
               {/* SEND BUTTON */}
-              <button
-                onClick={handleSendClick}
-                className="bg-[#20A8D8] hover:bg-[#1b8db8] text-white px-8 rounded py-3 flex items-center gap-2 mt-4"
-              >
+              <button onClick={handleSendClick}
+                className="bg-[#20A8D8] hover:bg-[#1b8db8] text-white px-8 rounded py-3 flex items-center gap-2 mt-4">
                 🚀 Send Now ({validNums.length} numbers)
               </button>
 
