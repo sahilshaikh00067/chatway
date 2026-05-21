@@ -131,11 +131,17 @@ function Login() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="btn w-full mt-2 text-xl py-3"
+                  className="btn w-full mt-2 text-xl py-3 cursor-pointer"
                 >
-                  Login
+                  {isSubmitting ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Logging in...</span>
+                    </div>
+                  ) : (
+                    "Login"
+                  )}
                 </button>
-
               </form>
             )}
           </Formik>
