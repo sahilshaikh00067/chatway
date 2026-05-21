@@ -19,7 +19,7 @@ function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-200">
 
-      <div className="bg-white shadow rounded flex overflow-hidden w-[1000px]">
+      <div className="bg-white shadow rounded flex overflow-hidden w-[1150px]">
 
         {/* LEFT IMAGE */}
         <div className="w-[50%] flex items-center justify-center bg-white">
@@ -30,7 +30,7 @@ function Login() {
         <div className="w-[50%] p-10">
 
           <h2 className="text-4xl font-medium mb-3">Login</h2>
-          <p className="text-gray-500 mb-8 text-lg">
+          <p className="text-gray-500 mb-5 text-lg">
             Just sign in if you have an account.
           </p>
 
@@ -107,7 +107,7 @@ function Login() {
                   onChange={handleChange}
                   onBlur={handleBlur}
                   value={values.username}
-                  className="input mb-5 text-lg"
+                  className="input mb-2 text-lg"
                 />
                 <p className="error">
                   {errors.username && touched.username && errors.username}
@@ -120,7 +120,7 @@ function Login() {
                   onChange={handleChange}
                   onBlur={handleBlur}
                   value={values.password}
-                  className="input mb-5 text-lg"
+                  className="input mb-1 text-lg"
                 />
                 <p className="error">
                   {errors.password && touched.password && errors.password}
@@ -131,7 +131,7 @@ function Login() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="btn w-full mt-4 text-xl py-3"
+                  className="btn w-full mt-2 text-xl py-3"
                 >
                   Login
                 </button>

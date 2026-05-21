@@ -6,20 +6,20 @@ import { RiDeleteBinLine } from "react-icons/ri";
 const API = "https://chatway-backend.onrender.com/api";
 
 export default function ManageUser() {
-  const navigate   = useNavigate();
+  const navigate = useNavigate();
   const loggedUser = JSON.parse(sessionStorage.getItem("user"));
-  const role       = sessionStorage.getItem("role");
+  const role = sessionStorage.getItem("role");
 
-  const [users,       setUsers]       = useState([]);
-  const [search,      setSearch]      = useState("");
-  const [editUser,    setEditUser]    = useState(null);
-  const [editForm,    setEditForm]    = useState({});
+  const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState("");
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const [creditModal, setCreditModal] = useState(null);
-  const [creditAmt,   setCreditAmt]   = useState("");
-  const [msg,         setMsg]         = useState("");
+  const [creditAmt, setCreditAmt] = useState("");
+  const [msg, setMsg] = useState("");
 
   const fetchUsers = async () => {
-    const res  = await fetch(`${API}/get-my-users/?user_id=${loggedUser.id}`);
+    const res = await fetch(`${API}/get-my-users/?user_id=${loggedUser.id}`);
     const data = await res.json();
     if (data.status === "success") setUsers(data.users);
   };
@@ -33,12 +33,12 @@ export default function ManageUser() {
 
     const endpoint = creditModal.mode === "add" ? "add-credit" : "deduct-credit";
 
-    const res  = await fetch(`${API}/${endpoint}/`, {
-      method:  "POST",
+    const res = await fetch(`${API}/${endpoint}/`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
+      body: JSON.stringify({
         from_id: loggedUser.id,
-        to_id:   creditModal.user.id,
+        to_id: creditModal.user.id,
         amount,
       }),
     });
@@ -60,10 +60,10 @@ export default function ManageUser() {
 
   // ── Toggle status ────────────────────────────────
   const toggleStatus = async (userId) => {
-    const res  = await fetch(`${API}/toggle-status/`, {
-      method:  "POST",
+    const res = await fetch(`${API}/toggle-status/`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ user_id: userId }),
+      body: JSON.stringify({ user_id: userId }),
     });
     const data = await res.json();
     if (data.status === "success") fetchUsers();
@@ -72,10 +72,10 @@ export default function ManageUser() {
   // ── Delete ───────────────────────────────────────
   const handleDelete = async (userId) => {
     if (!window.confirm("Delete this user?")) return;
-    const res  = await fetch(`${API}/delete-user/`, {
-      method:  "POST",
+    const res = await fetch(`${API}/delete-user/`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ user_id: userId }),
+      body: JSON.stringify({ user_id: userId }),
     });
     const data = await res.json();
     if (data.status === "success") fetchUsers();
@@ -86,19 +86,19 @@ export default function ManageUser() {
     const pwd = prompt("Enter new password");
     if (!pwd) return;
     await fetch(`${API}/reset-password/`, {
-      method:  "POST",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ user_id: userId, password: pwd }),
+      body: JSON.stringify({ user_id: userId, password: pwd }),
     });
     alert("Password reset ✅");
   };
 
   // ── Edit save ────────────────────────────────────
   const handleEditSave = async () => {
-    const res  = await fetch(`${API}/update-user/`, {
-      method:  "POST",
+    const res = await fetch(`${API}/update-user/`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ user_id: editUser.id, ...editForm }),
+      body: JSON.stringify({ user_id: editUser.id, ...editForm }),
     });
     const data = await res.json();
     if (data.status === "success") {
@@ -124,42 +124,41 @@ export default function ManageUser() {
       <div className="p-4">
 
         {/* SUCCESS / ERROR MESSAGE */}
-{msg && (
-  <div
-    className={`premium-alert ${
-      msg.startsWith("✅")
-        ? "premium-success"
-        : "premium-error"
-    }`}
-  >
-    <div className="flex items-center gap-3">
+        {msg && (
+          <div
+            className={`premium-alert ${msg.startsWith("✅")
+                ? "premium-success"
+                : "premium-error"
+              }`}
+          >
+            <div className="flex items-center gap-3">
 
-      <div className="alert-icon">
-        {msg.startsWith("✅") ? "✓" : "!"}
-      </div>
+              <div className="alert-icon">
+                {msg.startsWith("✅") ? "✓" : "!"}
+              </div>
 
-      <div className="flex-1">
-        <p className="font-semibold tracking-wide">
-          {msg.startsWith("✅")
-            ? "Success"
-            : "Error"}
-        </p>
+              <div className="flex-1">
+                <p className="font-semibold tracking-wide">
+                  {msg.startsWith("✅")
+                    ? "Success"
+                    : "Error"}
+                </p>
 
-        <p className="text-[13px] opacity-90">
-          {msg}
-        </p>
-      </div>
+                <p className="text-[13px] opacity-90">
+                  {msg}
+                </p>
+              </div>
 
-      <button
-        onClick={() => setMsg("")}
-        className="close-btn"
-      >
-        ✕
-      </button>
+              <button
+                onClick={() => setMsg("")}
+                className="close-btn"
+              >
+                ✕
+              </button>
 
-    </div>
-  </div>
-)}
+            </div>
+          </div>
+        )}
         {/* TOP BAR */}
         <div className="w-[800px] bg-gray-100 border border-gray-300 p-2 mb-4 flex items-center gap-3">
 
@@ -227,8 +226,8 @@ export default function ManageUser() {
                       {/* ROLE BADGE */}
                       <td className="border-r border-gray-200">
                         <span className={`px-2 py-1 rounded text-xs text-white
-                          ${u.role === "admin"    ? "bg-purple-500" :
-                            u.role === "reseller" ? "bg-blue-500"   : "bg-gray-500"}`}>
+                          ${u.role === "admin" ? "bg-purple-500" :
+                            u.role === "reseller" ? "bg-blue-500" : "bg-gray-500"}`}>
                           {u.role}
                         </span>
                       </td>
@@ -293,11 +292,13 @@ export default function ManageUser() {
                             className="p-2 rounded-full bg-[#63c2de] hover:bg-blue-500 text-white"
                           ><FaEdit size={11} /></button>
 
-                          <button
-                            onClick={() => handleDelete(u.id)}
-                            title="Delete User"
-                            className="p-2 rounded-full bg-[#f86c6b] hover:bg-red-600 text-white"
-                          ><RiDeleteBinLine size={11} /></button>
+                          {role === "admin" && (
+                            <button
+                              onClick={() => handleDelete(u.id)}
+                              title="Delete User"
+                              className="p-2 rounded-full bg-[#f86c6b] hover:bg-red-600 text-white"
+                            ><RiDeleteBinLine size={11} /></button>
+                          )}
                         </div>
                       </td>
 
