@@ -15,6 +15,9 @@ TOKENS = [
     "WlRJVy9obHpmZ3krL2gwRjNueUQ3QT09",
     "R2IxeEMrLzY3ZDRjTTFvNHg1VWl6dz09",
     "cUg3MENYa3c5SWdZVEt1ZTRydW1hZz09",
+    "TC9CK2JoTkl6c1FxaHhuekhRTnVFQT09",
+    "bnNDamxYdnNhYm1lZlZ0alkxeGRYQT09",
+    
 ]
 
 TOKEN_COUNT = len(TOKENS)
