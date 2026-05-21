@@ -362,7 +362,6 @@ export default function WappDpCampaign() {
                     <span className="text-sm text-gray-400">({validNums.length} valid)</span>
                   </div>
                   <textarea value={numbers} onChange={handleNumbersChange}
-                    placeholder={"Enter numbers\none per line\n\nOnly 10-digit\nIndian mobile\naccepted"}
                     className="w-full h-[500px] border border-green-400 rounded px-2 py-2 text-[13px] outline-none resize-none" />
                 </div>
 
