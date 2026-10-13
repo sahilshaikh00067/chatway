@@ -2,22 +2,24 @@ from pathlib import Path
 import os
 import dj_database_url
 
-# =========================
+# ==================================================
 # BASE DIRECTORY
-# =========================
+# ==================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# =========================
+# ==================================================
 # SECURITY SETTINGS
-# =========================
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-local-development-key-change-this-before-production",
-)
+# ==================================================
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
-# Local development default: True
-# Render environment variable: DJANGO_DEBUG=False
+if not SECRET_KEY:
+    if os.environ.get("RENDER"):
+        raise RuntimeError(
+            "DJANGO_SECRET_KEY is missing in Render environment variables."
+        )
+    SECRET_KEY = "django-insecure-local-development-only-change-before-production"
+
 DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() == "true"
 
 ALLOWED_HOSTS = [
@@ -29,9 +31,9 @@ ALLOWED_HOSTS = [
 ]
 
 
-# =========================
+# ==================================================
 # CSRF TRUSTED ORIGINS
-# =========================
+# ==================================================
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -43,9 +45,9 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 
-# =========================
+# ==================================================
 # INSTALLED APPS
-# =========================
+# ==================================================
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -53,35 +55,31 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
     "rest_framework",
     "corsheaders",
-
     "api",
 ]
 
 
-# =========================
+# ==================================================
 # MIDDLEWARE
-# =========================
+# ==================================================
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-
-    # Keep CSRF middleware enabled.
     "django.middleware.csrf.CsrfViewMiddleware",
-
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 
-# =========================
+# ==================================================
 # CORS SETTINGS
-# =========================
+# ==================================================
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -116,15 +114,15 @@ CORS_ALLOW_HEADERS = [
 ]
 
 
-# =========================
+# ==================================================
 # URL CONFIGURATION
-# =========================
+# ==================================================
 ROOT_URLCONF = "backend.urls"
 
 
-# =========================
+# ==================================================
 # TEMPLATES
-# =========================
+# ==================================================
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -141,38 +139,44 @@ TEMPLATES = [
 ]
 
 
-# =========================
+# ==================================================
 # WSGI
-# =========================
+# ==================================================
 WSGI_APPLICATION = "backend.wsgi.application"
 
 
-# =========================
+# ==================================================
 # DATABASE
-# =========================
+# ==================================================
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if DATABASE_URL:
+    # Render PostgreSQL or another configured database
     DATABASES = {
         "default": dj_database_url.config(
             default=DATABASE_URL,
-            conn_max_age=600,
+            conn_max_age=60,
             conn_health_checks=True,
         )
     }
-else:
-    # Local development fallback
+elif not os.environ.get("RENDER"):
+    # Local development fallback only
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+else:
+    raise RuntimeError(
+        "DATABASE_URL is missing. "
+        "Configure it in Render Environment Variables."
+    )
 
 
-# =========================
+# ==================================================
 # PASSWORD VALIDATION
-# =========================
+# ==================================================
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": (
@@ -201,9 +205,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-# =========================
+# ==================================================
 # INTERNATIONALIZATION
-# =========================
+# ==================================================
 LANGUAGE_CODE = "en-us"
 
 TIME_ZONE = "UTC"
@@ -213,33 +217,37 @@ USE_I18N = True
 USE_TZ = True
 
 
-# =========================
+# ==================================================
 # STATIC FILES
-# =========================
+# ==================================================
 STATIC_URL = "/static/"
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+STATICFILES_STORAGE = (
+    "whitenoise.storage.CompressedManifestStaticFilesStorage"
+)
 
-# =========================
+
+# ==================================================
 # MEDIA FILES
-# =========================
+# ==================================================
 MEDIA_URL = "/media/"
 
 MEDIA_ROOT = BASE_DIR / "media"
 
 
-# =========================
+# ==================================================
 # FILE UPLOAD LIMITS
-# =========================
+# ==================================================
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
 
-# =========================
+# ==================================================
 # REST FRAMEWORK
-# =========================
+# ==================================================
 REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": [
         "rest_framework.parsers.MultiPartParser",
@@ -249,7 +257,23 @@ REST_FRAMEWORK = {
 }
 
 
-# =========================
+# ==================================================
+# PROXY / HTTPS SETTINGS
+# ==================================================
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Enable HTTPS redirects only if your production domain
+# and Render HTTPS configuration are working correctly.
+SECURE_SSL_REDIRECT = (
+    os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "False").lower()
+    == "true"
+)
+
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+
+
+# ==================================================
 # DEFAULT PRIMARY KEY
-# =========================
+# ==================================================
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
